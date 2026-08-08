@@ -38,11 +38,17 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource
 
         $data = $payload['data'] ?? null;
 
-        if (! is_array($data) || ! $this->hasUsableModel($data)) {
+        if (! is_array($data)) {
             throw new UnexpectedValueException('OpenRouter returned an empty or unusable pricing catalog.');
         }
 
-        return $data;
+        $catalog = $this->usableModels($data);
+
+        if ($catalog === []) {
+            throw new UnexpectedValueException('OpenRouter returned an empty or unusable pricing catalog.');
+        }
+
+        return $catalog;
     }
 
     /** @param array<int|string, mixed> $catalog
@@ -107,20 +113,32 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource
         return $record;
     }
 
-    /** @param array<int|string, mixed> $catalog */
-    private function hasUsableModel(array $catalog): bool
+    /** @param array<int|string, mixed> $catalog
+     * @return list<array<string, mixed>>
+     */
+    private function usableModels(array $catalog): array
     {
-        $usable = false;
+        $usable = [];
 
         foreach ($catalog as $model) {
-            $pricing = is_array($model) ? ($model['pricing'] ?? null) : null;
+            if (! is_array($model)) {
+                continue;
+            }
 
-            if (is_array($pricing)) {
+            $pricing = $model['pricing'] ?? null;
+
+            if (! is_array($pricing)) {
+                continue;
+            }
+
+            try {
                 $rates = $this->rates($pricing);
+            } catch (\Throwable) {
+                continue;
+            }
 
-                if (is_string($model['id'] ?? null) && trim($model['id']) !== '' && $rates !== []) {
-                    $usable = true;
-                }
+            if (is_string($model['id'] ?? null) && trim($model['id']) !== '' && $rates !== []) {
+                $usable[] = $this->record($model);
             }
         }
 

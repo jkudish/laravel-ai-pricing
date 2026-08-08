@@ -69,6 +69,31 @@ it('reads and caches the official OpenRouter models response', function (): void
         && ! $request->hasHeader('Authorization'));
 });
 
+it('ignores OpenRouter sentinel-priced router models without rejecting valid prices', function (): void {
+    Http::fake([
+        'https://openrouter.test/api/v1/models' => Http::response([
+            'data' => [
+                [
+                    'id' => 'openrouter/auto',
+                    'pricing' => ['prompt' => '-1', 'completion' => '-1'],
+                ],
+                [
+                    'id' => 'google/gemini-test',
+                    'pricing' => ['prompt' => '0.000001', 'completion' => '0.000003'],
+                ],
+            ],
+        ]),
+    ]);
+
+    $source = openRouterSource();
+    $definition = $source->find(new ModelIdentity('openrouter', 'google/gemini-test'));
+
+    expect($definition)->not->toBeNull()
+        ->and((string) $definition?->rates['input_tokens']->amount)->toBe('0.000001')
+        ->and($source->find(new ModelIdentity('openrouter', 'openrouter/auto')))->toBeNull()
+        ->and($source->sync())->toBe(1);
+});
+
 it('reads Portkey fallback pricing from a fixture-compatible catalog', function (): void {
     Http::fake([
         'https://portkey.test/pricing/anthropic.json' => Http::response([
