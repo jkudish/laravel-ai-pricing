@@ -51,6 +51,12 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource
         return $catalog;
     }
 
+    #[Override]
+    protected function supportsIdentity(ModelIdentity $identity): bool
+    {
+        return strtolower(trim($identity->provider)) === 'openrouter';
+    }
+
     /** @param array<int|string, mixed> $catalog
      * @return array<string, mixed>|null
      */
@@ -87,14 +93,14 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource
             rates: $rates,
             source: PricingSource::ProviderNative,
             retrievedAt: $this->retrievedAt ?? new DateTimeImmutable,
-            sourceReference: $this->endpoint,
+            sourceReference: $this->sourceReference,
         );
     }
 
     #[Override]
     protected function cacheKey(): string
     {
-        return 'ai-pricing:catalog:openrouter:v1';
+        return 'ai-pricing:catalog:openrouter:v2:'.hash('sha256', $this->endpointIdentity());
     }
 
     /** @param array<mixed> $value

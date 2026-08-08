@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Jkudish\LaravelAiPricing\Contracts\PricingCatalog;
+use Jkudish\LaravelAiPricing\Support\Endpoint;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Override;
@@ -16,6 +17,8 @@ use Throwable;
 abstract class AbstractRemotePricingSource implements PricingCatalog
 {
     protected ?DateTimeImmutable $retrievedAt = null;
+
+    protected ?string $sourceReference = null;
 
     public function __construct(
         protected HttpFactory $http,
@@ -28,6 +31,10 @@ abstract class AbstractRemotePricingSource implements PricingCatalog
     #[Override]
     final public function find(ModelIdentity $identity): ?PriceDefinition
     {
+        if (! $this->supportsIdentity($identity)) {
+            return null;
+        }
+
         $catalog = $this->catalog();
         $model = $this->findModel($catalog, $identity);
 
@@ -43,6 +50,7 @@ abstract class AbstractRemotePricingSource implements PricingCatalog
 
         $catalog = $this->retrieve();
         $this->retrievedAt = new DateTimeImmutable;
+        $this->sourceReference = Endpoint::provenance($this->endpoint);
         $this->store($catalog);
 
         return count($catalog);
@@ -60,6 +68,7 @@ abstract class AbstractRemotePricingSource implements PricingCatalog
         try {
             $catalog = $this->retrieve();
             $this->retrievedAt = new DateTimeImmutable;
+            $this->sourceReference = Endpoint::provenance($this->endpoint);
             $this->store($catalog);
 
             return $catalog;
@@ -76,6 +85,8 @@ abstract class AbstractRemotePricingSource implements PricingCatalog
         if (is_array($value) && is_array($value['catalog'] ?? null)) {
             $retrievedAt = $value['retrieved_at'] ?? null;
             $this->retrievedAt = is_string($retrievedAt) ? new DateTimeImmutable($retrievedAt) : null;
+            $sourceReference = $value['source_reference'] ?? null;
+            $this->sourceReference = is_string($sourceReference) ? Endpoint::provenance($sourceReference) : null;
 
             return $value['catalog'];
         }
@@ -91,6 +102,8 @@ abstract class AbstractRemotePricingSource implements PricingCatalog
         if (is_array($value) && is_array($value['catalog'] ?? null)) {
             $retrievedAt = $value['retrieved_at'] ?? null;
             $this->retrievedAt = is_string($retrievedAt) ? new DateTimeImmutable($retrievedAt) : null;
+            $sourceReference = $value['source_reference'] ?? null;
+            $this->sourceReference = is_string($sourceReference) ? Endpoint::provenance($sourceReference) : null;
 
             return $value['catalog'];
         }
@@ -107,14 +120,20 @@ abstract class AbstractRemotePricingSource implements PricingCatalog
     }
 
     /** @param array<int|string, mixed> $catalog
-     * @return array{retrieved_at: string, catalog: array<int|string, mixed>}
+     * @return array{retrieved_at: string, source_reference: string, catalog: array<int|string, mixed>}
      */
     private function cachePayload(array $catalog): array
     {
         return [
             'retrieved_at' => ($this->retrievedAt ?? new DateTimeImmutable)->format(DATE_ATOM),
+            'source_reference' => $this->sourceReference ?? Endpoint::provenance($this->endpoint),
             'catalog' => $catalog,
         ];
+    }
+
+    final protected function endpointIdentity(): string
+    {
+        return Endpoint::identity($this->endpoint);
     }
 
     /** @return array<int|string, mixed> */
@@ -127,6 +146,11 @@ abstract class AbstractRemotePricingSource implements PricingCatalog
 
     /** @param array<string, mixed> $model */
     abstract protected function definition(ModelIdentity $identity, array $model): ?PriceDefinition;
+
+    protected function supportsIdentity(ModelIdentity $identity): bool
+    {
+        return true;
+    }
 
     abstract protected function cacheKey(): string;
 }

@@ -11,24 +11,27 @@ use Jkudish\LaravelAiPricing\Sources\OpenRouterPricingSource;
 use Jkudish\LaravelAiPricing\Sources\PortkeyPricingSource;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 
-function openRouterSource(bool $offline = false): OpenRouterPricingSource
+function openRouterSource(bool $offline = false, string $endpoint = 'https://openrouter.test/api/v1/models'): OpenRouterPricingSource
 {
     return new OpenRouterPricingSource(
         app(Factory::class),
         Cache::store(),
-        'https://openrouter.test/api/v1/models',
+        $endpoint,
         3600,
         $offline,
     );
 }
 
 /** @param list<string> $providers */
-function portkeySource(bool $offline = false, array $providers = []): PortkeyPricingSource
-{
+function portkeySource(
+    bool $offline = false,
+    array $providers = [],
+    string $endpoint = 'https://portkey.test/pricing/{provider}.json',
+): PortkeyPricingSource {
     return new PortkeyPricingSource(
         app(Factory::class),
         Cache::store(),
-        'https://portkey.test/pricing/{provider}.json',
+        $endpoint,
         3600,
         $offline,
         $providers,
@@ -92,6 +95,25 @@ it('ignores OpenRouter sentinel-priced router models without rejecting valid pri
         ->and((string) $definition?->rates['input_tokens']->amount)->toBe('0.000001')
         ->and($source->find(new ModelIdentity('openrouter', 'openrouter/auto')))->toBeNull()
         ->and($source->sync())->toBe(1);
+});
+
+it('does not apply OpenRouter pricing to models invoked through another provider', function (): void {
+    Http::fake([
+        'https://openrouter.test/api/v1/models' => Http::response([
+            'data' => [[
+                'id' => 'anthropic/claude-test',
+                'pricing' => ['prompt' => '0.000001'],
+            ]],
+        ]),
+    ]);
+
+    $source = openRouterSource();
+
+    expect($source->find(new ModelIdentity('anthropic', 'anthropic/claude-test')))->toBeNull();
+    Http::assertNothingSent();
+
+    expect($source->find(new ModelIdentity(' OpenRouter ', 'anthropic/claude-test')))->not->toBeNull();
+    Http::assertSentCount(1);
 });
 
 it('reads Portkey fallback pricing from a fixture-compatible catalog', function (): void {
@@ -198,6 +220,49 @@ it('uses a cached catalog offline without making a request', function (): void {
     Http::assertSentCount(1);
 });
 
+it('isolates OpenRouter caches by normalized endpoint and preserves cached source provenance', function (): void {
+    $sourceEndpoint = 'https://openrouter.test/api/v1/models';
+    Http::fake([$sourceEndpoint => Http::response(['data' => [[
+        'id' => 'cached/model', 'pricing' => ['prompt' => '0.1'],
+    ]]])]);
+    openRouterSource(endpoint: $sourceEndpoint)->find(new ModelIdentity('openrouter', 'cached/model'));
+    Http::preventStrayRequests();
+
+    $cached = openRouterSource(
+        offline: true,
+        endpoint: 'HTTPS://OPENROUTER.TEST/api/v1/models',
+    )->find(new ModelIdentity('openrouter', 'cached/model'));
+    $unrelated = openRouterSource(
+        offline: true,
+        endpoint: 'https://other-openrouter.test/api/v1/models',
+    )->find(new ModelIdentity('openrouter', 'cached/model'));
+
+    expect($cached?->sourceReference)->toBe($sourceEndpoint)
+        ->and($unrelated)->toBeNull();
+    Http::assertSentCount(1);
+});
+
+it('uses the full OpenRouter URL for requests without exposing endpoint credentials in provenance', function (): void {
+    $endpoint = 'https://catalog-user:catalog-pass@openrouter.test/api/v1/models?api-key=super-secret&region=ca';
+    Http::fake(['*' => Http::response(['data' => [[
+        'id' => 'secure/model', 'pricing' => ['prompt' => '0.1'],
+    ]]])]);
+
+    $definition = openRouterSource(endpoint: $endpoint)
+        ->find(new ModelIdentity('openrouter', 'secure/model'));
+    Http::preventStrayRequests();
+    $cached = openRouterSource(offline: true, endpoint: $endpoint)
+        ->find(new ModelIdentity('openrouter', 'secure/model'));
+
+    Http::assertSent(fn ($request): bool => $request->url() === $endpoint);
+    expect($definition?->sourceReference)
+        ->toBe('https://openrouter.test/api/v1/models?api-key=%5BREDACTED%5D&region=ca')
+        ->and($cached?->sourceReference)->toBe($definition?->sourceReference)
+        ->not->toContain('catalog-user')
+        ->not->toContain('catalog-pass')
+        ->not->toContain('super-secret');
+});
+
 it('uses expired Portkey last-known-good pricing offline', function (): void {
     Carbon::setTestNow('2026-08-07 12:00:00');
     Http::fake(['https://portkey.test/pricing/anthropic.json' => Http::response([
@@ -209,6 +274,51 @@ it('uses expired Portkey last-known-good pricing offline', function (): void {
 
     expect(portkeySource(offline: true)->find(new ModelIdentity('anthropic', 'claude')))->not->toBeNull();
     Http::assertSentCount(1);
+});
+
+it('isolates Portkey caches by normalized endpoint and preserves cached source provenance', function (): void {
+    $sourceEndpoint = 'https://portkey.test/pricing/{provider}.json';
+    $sourceUrl = 'https://portkey.test/pricing/anthropic.json';
+    Http::fake([$sourceUrl => Http::response([
+        'claude' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => '0.1']]]],
+    ])]);
+    portkeySource(endpoint: $sourceEndpoint)->find(new ModelIdentity('Anthropic', 'claude'));
+    Http::preventStrayRequests();
+
+    $cached = portkeySource(
+        offline: true,
+        endpoint: 'HTTPS://PORTKEY.TEST/pricing/{provider}.json',
+    )->find(new ModelIdentity(' anthropic ', 'claude'));
+    $unrelated = portkeySource(
+        offline: true,
+        endpoint: 'https://other-portkey.test/pricing/{provider}.json',
+    )->find(new ModelIdentity('anthropic', 'claude'));
+
+    expect($cached?->sourceReference)->toBe($sourceUrl)
+        ->and($unrelated)->toBeNull();
+    Http::assertSentCount(1);
+});
+
+it('uses the full Portkey URL for requests without exposing endpoint credentials in provenance', function (): void {
+    $endpoint = 'https://catalog-user:catalog-pass@portkey.test/pricing/{provider}.json?access_token=super-secret&region=ca';
+    $requestUrl = 'https://catalog-user:catalog-pass@portkey.test/pricing/anthropic.json?access_token=super-secret&region=ca';
+    Http::fake(['*' => Http::response([
+        'claude' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => '0.1']]]],
+    ])]);
+
+    $definition = portkeySource(endpoint: $endpoint)
+        ->find(new ModelIdentity('anthropic', 'claude'));
+    Http::preventStrayRequests();
+    $cached = portkeySource(offline: true, endpoint: $endpoint)
+        ->find(new ModelIdentity('anthropic', 'claude'));
+
+    Http::assertSent(fn ($request): bool => $request->url() === $requestUrl);
+    expect($definition?->sourceReference)
+        ->toBe('https://portkey.test/pricing/anthropic.json?access_token=%5BREDACTED%5D&region=ca')
+        ->and($cached?->sourceReference)->toBe($definition?->sourceReference)
+        ->not->toContain('catalog-user')
+        ->not->toContain('catalog-pass')
+        ->not->toContain('super-secret');
 });
 
 it('returns no definition on network failure so missing pricing cannot block', function (): void {

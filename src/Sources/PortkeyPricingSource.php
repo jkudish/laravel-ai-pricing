@@ -10,6 +10,7 @@ use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Jkudish\LaravelAiPricing\Contracts\PricingCatalog;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
+use Jkudish\LaravelAiPricing\Support\Endpoint;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Jkudish\LaravelAiPricing\ValueObjects\Rate;
@@ -27,6 +28,12 @@ final class PortkeyPricingSource implements PricingCatalog
         'request_audio_token' => 'input_audio_tokens',
         'response_audio_token' => 'output_audio_tokens',
     ];
+
+    /** @var array<string, DateTimeImmutable|null> */
+    private array $retrievedAt = [];
+
+    /** @var array<string, string|null> */
+    private array $sourceReferences = [];
 
     /** @param list<string> $providers */
     public function __construct(
@@ -98,7 +105,8 @@ final class PortkeyPricingSource implements PricingCatalog
     /** @return array<string, mixed> */
     private function retrieve(string $provider): array
     {
-        $url = str_replace('{provider}', rawurlencode(strtolower($provider)), $this->endpoint);
+        $provider = $this->normalizedProvider($provider);
+        $url = $this->sourceUrl($provider);
         $payload = $this->http->acceptJson()->get($url)->throw()->json();
 
         $catalog = is_array($payload) ? $this->record($payload) : [];
@@ -107,12 +115,16 @@ final class PortkeyPricingSource implements PricingCatalog
             throw new UnexpectedValueException('Portkey returned an empty or unusable pricing catalog.');
         }
 
+        $this->retrievedAt[$provider] = new DateTimeImmutable;
+        $this->sourceReferences[$provider] = Endpoint::provenance($url);
+
         return $catalog;
     }
 
     /** @return array<string, mixed> */
     private function cachedCatalog(string $provider): array
     {
+        $provider = $this->normalizedProvider($provider);
         $payload = $this->cache->get($this->cacheKey($provider), []);
 
         if (! is_array($payload)) {
@@ -121,14 +133,20 @@ final class PortkeyPricingSource implements PricingCatalog
 
         $catalog = $payload['catalog'] ?? $payload;
 
+        if (array_key_exists('catalog', $payload)) {
+            $this->recordProvenance($provider, $payload);
+        }
+
         return is_array($catalog) ? $this->record($catalog) : [];
     }
 
     /** @param array<string, mixed> $catalog */
     private function store(string $provider, array $catalog): void
     {
+        $provider = $this->normalizedProvider($provider);
         $payload = [
-            'retrieved_at' => (new DateTimeImmutable)->format(DATE_ATOM),
+            'retrieved_at' => ($this->retrievedAt[$provider] ?? new DateTimeImmutable)->format(DATE_ATOM),
+            'source_reference' => $this->sourceReferences[$provider] ?? Endpoint::provenance($this->sourceUrl($provider)),
             'catalog' => $catalog,
         ];
         $this->cache->put($this->cacheKey($provider), $payload, $this->ttlSeconds);
@@ -138,8 +156,13 @@ final class PortkeyPricingSource implements PricingCatalog
     /** @return array<string, mixed> */
     private function lastKnownGoodCatalog(string $provider): array
     {
+        $provider = $this->normalizedProvider($provider);
         $payload = $this->cache->get($this->cacheKey($provider).':lkg', []);
         $catalog = is_array($payload) ? ($payload['catalog'] ?? null) : null;
+
+        if (is_array($payload)) {
+            $this->recordProvenance($provider, $payload);
+        }
 
         return is_array($catalog) ? $this->record($catalog) : [];
     }
@@ -170,8 +193,8 @@ final class PortkeyPricingSource implements PricingCatalog
             identity: $identity,
             rates: $rates,
             source: PricingSource::Portkey,
-            retrievedAt: $this->cachedRetrievedAt($identity->provider),
-            sourceReference: str_replace('{provider}', rawurlencode(strtolower($identity->provider)), $this->endpoint),
+            retrievedAt: $this->retrievedAt[$this->normalizedProvider($identity->provider)] ?? null,
+            sourceReference: $this->sourceReferences[$this->normalizedProvider($identity->provider)] ?? null,
         );
     }
 
@@ -182,17 +205,36 @@ final class PortkeyPricingSource implements PricingCatalog
         return new Rate($unit, $dollars, currency: $currency);
     }
 
-    private function cachedRetrievedAt(string $provider): ?DateTimeImmutable
+    /** @param array<int|string, mixed> $payload */
+    private function recordProvenance(string $provider, array $payload): void
     {
-        $payload = $this->cache->get($this->cacheKey($provider).':lkg', []);
-        $retrievedAt = is_array($payload) ? ($payload['retrieved_at'] ?? null) : null;
+        $retrievedAt = $payload['retrieved_at'] ?? null;
+        $sourceReference = $payload['source_reference'] ?? null;
 
-        return is_string($retrievedAt) ? new DateTimeImmutable($retrievedAt) : null;
+        $this->retrievedAt[$provider] = is_string($retrievedAt) ? new DateTimeImmutable($retrievedAt) : null;
+        $this->sourceReferences[$provider] = is_string($sourceReference) ? Endpoint::provenance($sourceReference) : null;
     }
 
     private function cacheKey(string $provider): string
     {
-        return 'ai-pricing:catalog:portkey:v1:'.hash('sha256', strtolower($provider));
+        $identity = $this->endpointIdentity().'|'.$this->normalizedProvider($provider);
+
+        return 'ai-pricing:catalog:portkey:v2:'.hash('sha256', $identity);
+    }
+
+    private function sourceUrl(string $provider): string
+    {
+        return str_replace('{provider}', rawurlencode($this->normalizedProvider($provider)), trim($this->endpoint));
+    }
+
+    private function endpointIdentity(): string
+    {
+        return Endpoint::identity($this->endpoint);
+    }
+
+    private function normalizedProvider(string $provider): string
+    {
+        return strtolower(trim($provider));
     }
 
     /** @param array<mixed> $value

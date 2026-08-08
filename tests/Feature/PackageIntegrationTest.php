@@ -64,3 +64,29 @@ it('applies the package currency to configured rates that omit currency', functi
     expect($quote->completeness->value)->toBe('complete')
         ->and($quote->cost?->currency)->toBe('CAD');
 });
+
+it('normalizes configured pricing identity keys', function (): void {
+    config()->set('ai-pricing.prices', [
+        ' OpenAI:GPT-TEST ' => ['input_tokens' => ['amount' => '1', 'per' => '1000']],
+    ]);
+    app()->forgetInstance(ConfiguredPricingSource::class);
+    app()->forgetInstance(CostResolver::class);
+
+    $quote = app(CostResolver::class)->resolve(new PricingObservation(
+        new ModelIdentity('openai', 'gpt-test'),
+        Usage::tokens(1000, 0),
+    ));
+
+    expect((string) $quote->cost?->amount)->toBe('1');
+});
+
+it('rejects configured identities that collide after normalization', function (): void {
+    config()->set('ai-pricing.prices', [
+        'OpenAI:GPT-TEST' => ['input_tokens' => ['amount' => '1']],
+        'openai:gpt-test' => ['input_tokens' => ['amount' => '2']],
+    ]);
+    app()->forgetInstance(ConfiguredPricingSource::class);
+
+    expect(fn (): ConfiguredPricingSource => app(ConfiguredPricingSource::class))
+        ->toThrow(InvalidArgumentException::class, 'duplicates');
+});
