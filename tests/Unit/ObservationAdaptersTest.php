@@ -53,6 +53,97 @@ it('structurally adapts Laravel AI usage and meta without requiring laravel ai',
         ->and($observation->usage->toArray())->toMatchArray(['input_tokens' => '10', 'output_tokens' => '3']);
 });
 
+it('adapts the nested meta and usage shape returned by Laravel AI responses', function (): void {
+    $response = new class
+    {
+        public object $usage;
+
+        public object $meta;
+
+        public function __construct()
+        {
+            $this->usage = (object) [
+                'promptTokens' => 120,
+                'completionTokens' => 30,
+                'cacheWriteInputTokens' => 10,
+                'cacheReadInputTokens' => 20,
+                'reasoningTokens' => 5,
+            ];
+            $this->meta = (object) [
+                'provider' => 'openrouter',
+                'model' => 'anthropic/claude-test',
+            ];
+        }
+    };
+
+    $observation = (new LaravelAiObservationAdapter)->adapt($response);
+
+    expect($observation->identity->key())->toBe('openrouter:anthropic/claude-test')
+        ->and($observation->usage->toArray())->toBe([
+            'input_tokens' => '90',
+            'output_tokens' => '30',
+            'cached_input_tokens' => '20',
+            'cache_write_input_tokens' => '10',
+            'reasoning_tokens' => '5',
+        ]);
+});
+
+it('normalizes provider-specific harness units into the shared pricing contract', function (object $adapter, array $usage, array $expected): void {
+    $observation = $adapter->adapt([
+        'provider' => 'harness',
+        'model' => 'model',
+        'usage' => $usage,
+    ]);
+
+    expect($observation->usage->toArray())->toBe($expected);
+})->with([
+    'Codex' => [
+        new CodexObservationAdapter,
+        [
+            'input_tokens' => 120,
+            'cached_input_tokens' => 32,
+            'output_tokens' => 14,
+            'reasoning_output_tokens' => 4,
+        ],
+        [
+            'input_tokens' => '120',
+            'output_tokens' => '14',
+            'cached_input_tokens' => '32',
+            'reasoning_tokens' => '4',
+        ],
+    ],
+    'Claude' => [
+        new ClaudeObservationAdapter,
+        [
+            'input_tokens' => 100,
+            'output_tokens' => 20,
+            'cache_creation_input_tokens' => 15,
+            'cache_read_input_tokens' => 30,
+        ],
+        [
+            'input_tokens' => '100',
+            'output_tokens' => '20',
+            'cached_input_tokens' => '30',
+            'cache_write_input_tokens' => '15',
+        ],
+    ],
+    'Amp' => [
+        new AmpObservationAdapter,
+        [
+            'inputTokens' => 100,
+            'outputTokens' => 20,
+            'cacheCreationInputTokens' => 15,
+            'cacheReadInputTokens' => 30,
+        ],
+        [
+            'input_tokens' => '100',
+            'output_tokens' => '20',
+            'cached_input_tokens' => '30',
+            'cache_write_input_tokens' => '15',
+        ],
+    ],
+]);
+
 it('rejects incomplete normalized observations', function (): void {
     expect(fn () => (new NormalizedObservationAdapter)->adapt(['provider' => 'openai']))
         ->toThrow(InvalidArgumentException::class);

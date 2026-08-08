@@ -53,9 +53,14 @@ class NormalizedObservationAdapter implements ObservationAdapter
         $aliases = [
             'input_tokens' => ['input_tokens', 'prompt_tokens', 'inputTokens', 'promptTokens'],
             'output_tokens' => ['output_tokens', 'completion_tokens', 'outputTokens', 'completionTokens'],
-            'cached_input_tokens' => ['cached_input_tokens', 'cache_read_input_tokens', 'cachedInputTokens'],
-            'cache_write_input_tokens' => ['cache_write_input_tokens', 'cacheWriteInputTokens'],
-            'reasoning_tokens' => ['reasoning_tokens', 'reasoningTokens'],
+            'cached_input_tokens' => ['cached_input_tokens', 'cache_read_input_tokens', 'cachedInputTokens', 'cacheReadInputTokens'],
+            'cache_write_input_tokens' => [
+                'cache_write_input_tokens',
+                'cache_creation_input_tokens',
+                'cacheWriteInputTokens',
+                'cacheCreationInputTokens',
+            ],
+            'reasoning_tokens' => ['reasoning_tokens', 'reasoning_output_tokens', 'reasoningTokens', 'reasoningOutputTokens'],
             'images' => ['images', 'image_count'],
             'audio_seconds' => ['audio_seconds', 'audioSeconds'],
         ];
