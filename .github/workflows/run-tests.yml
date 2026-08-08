@@ -41,10 +41,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          extensions: fileinfo
           coverage: none
 
       - name: Install matrix dependencies
@@ -62,10 +65,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
+          extensions: fileinfo
           coverage: none
 
       - name: Create a clean Laravel 12 consumer
