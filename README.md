@@ -1,8 +1,8 @@
 # Laravel AI Pricing
 
-Private, provenance-aware cost attribution for Laravel AI workloads. The plain-PHP core uses `brick/math` decimals; Laravel supplies configuration, cache, HTTP, and the `ai:pricing:sync` command. The package has no database and performs no currency conversion.
+Experimental, provenance-aware cost attribution for Laravel AI workloads. The plain-PHP core uses `brick/math` decimals; Laravel supplies configuration, cache, HTTP, and the `ai:pricing:sync` command. The package has no database and performs no currency conversion. The public API may change before the first stable release.
 
-## Private installation
+## Development installation
 
 Use a local Composer path repository while developing both packages:
 
@@ -14,7 +14,7 @@ Use a local Composer path repository while developing both packages:
 }
 ```
 
-Alternatively configure the private GitHub repository as a Composer VCS repository and authenticate Composer normally. Never commit access tokens.
+Alternatively configure this GitHub repository as a Composer VCS repository.
 
 ```bash
 composer require jkudish/laravel-ai-pricing:@dev
