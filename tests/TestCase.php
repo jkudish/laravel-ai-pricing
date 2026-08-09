@@ -1,37 +1,21 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jkudish\LaravelAiPricing\Tests;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
-use Orchestra\Testbench\TestCase as Orchestra;
+use Illuminate\Foundation\Application;
 use Jkudish\LaravelAiPricing\LaravelAiPricingServiceProvider;
+use Orchestra\Testbench\TestCase as Orchestra;
 
-class TestCase extends Orchestra
+abstract class TestCase extends Orchestra
 {
-    protected function setUp(): void
+    /**
+     * @param  Application  $app
+     * @return list<class-string>
+     */
+    protected function getPackageProviders($app): array
     {
-        parent::setUp();
-
-        Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'Jkudish\\LaravelAiPricing\\Database\\Factories\\'.class_basename($modelName).'Factory'
-        );
-    }
-
-    protected function getPackageProviders($app)
-    {
-        return [
-            LaravelAiPricingServiceProvider::class,
-        ];
-    }
-
-    public function getEnvironmentSetUp($app)
-    {
-        config()->set('database.default', 'testing');
-
-        /*
-         foreach (\Illuminate\Support\Facades\File::allFiles(__DIR__ . '/../database/migrations') as $migration) {
-            (include $migration->getRealPath())->up();
-         }
-         */
+        return [LaravelAiPricingServiceProvider::class];
     }
 }

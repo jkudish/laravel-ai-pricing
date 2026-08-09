@@ -1,84 +1,76 @@
-# Shared, provenance-aware AI pricing and cost attribution for Laravel applications.
+# Laravel AI Pricing
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/jkudish/laravel-ai-pricing.svg?style=flat-square)](https://packagist.org/packages/jkudish/laravel-ai-pricing)
-[![GitHub Tests Action Status](https://github.com/spatie/package-laravel-ai-pricing-laravel/actions/workflows/run-tests.yml/badge.svg)](https://github.com/jkudish/laravel-ai-pricing/actions?query=workflow%3Arun-tests+branch%3Amain)
-[![GitHub Code Style Action Status](https://github.com/spatie/package-laravel-ai-pricing-laravel/actions/workflows/fix-php-code-style-issues.yml/badge.svg)](https://github.com/jkudish/laravel-ai-pricing/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
-[![Total Downloads](https://img.shields.io/packagist/dt/jkudish/laravel-ai-pricing.svg?style=flat-square)](https://packagist.org/packages/jkudish/laravel-ai-pricing)
+Experimental, provenance-aware cost attribution for Laravel AI workloads. The plain-PHP core uses `brick/math` decimals; Laravel supplies configuration, cache, HTTP, and the `ai:pricing:sync` command. The package has no database and performs no currency conversion. The public API may change before the first stable release.
 
-This is where your description should go. Limit it to a paragraph or two. Consider adding a small example.
+## Development installation
 
-## Support us
+Use a local Composer path repository while developing both packages:
 
-[<img src="https://github-ads.s3.eu-central-1.amazonaws.com/laravel-ai-pricing.jpg?t=1" width="419px" />](https://spatie.be/github-ad-click/laravel-ai-pricing)
-
-We invest a lot of resources into creating [best in class open source packages](https://spatie.be/open-source). You can support us by [buying one of our paid products](https://spatie.be/open-source/support-us).
-
-We highly appreciate you sending us a postcard from your hometown, mentioning which of our package(s) you are using. You'll find our address on [our contact page](https://spatie.be/about-us). We publish all received postcards on [our virtual postcard wall](https://spatie.be/open-source/postcards).
-
-## Installation
-
-You can install the package via composer:
-
-```bash
-composer require jkudish/laravel-ai-pricing
+```json
+{
+    "repositories": [
+        {"type": "path", "url": "../laravel-ai-pricing", "options": {"symlink": true}}
+    ]
+}
 ```
 
-You can publish and run the migrations with:
+Alternatively configure this GitHub repository as a Composer VCS repository.
 
 ```bash
-php artisan vendor:publish --tag="laravel-ai-pricing-migrations"
-php artisan migrate
+composer require jkudish/laravel-ai-pricing:@dev
 ```
 
-You can publish the config file with:
+The service provider is discovered automatically. Publishing configuration is optional:
 
 ```bash
-php artisan vendor:publish --tag="laravel-ai-pricing-config"
+php artisan vendor:publish --tag=laravel-ai-pricing-config
 ```
 
-This is the contents of the published config file:
+## Resolve cost
 
 ```php
-return [
-];
+use Jkudish\LaravelAiPricing\Contracts\CostResolver;
+use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
+use Jkudish\LaravelAiPricing\ValueObjects\PricingObservation;
+use Jkudish\LaravelAiPricing\ValueObjects\Usage;
+
+$quote = app(CostResolver::class)->resolve(new PricingObservation(
+    identity: new ModelIdentity('openrouter', 'google/gemini-3-flash'),
+    usage: Usage::tokens(input: 1_000, output: 250),
+));
 ```
 
-Optionally, you can publish the views using
+Quotes explicitly report `complete`, `partial`, or `unavailable`, with their source and immutable pricing snapshot. Missing pricing never blocks the caller.
 
-```bash
-php artisan vendor:publish --tag="laravel-ai-pricing-views"
-```
-
-## Usage
+Resolution order is provider-reported cost, application-configured pricing, provider-native/OpenRouter metadata, Portkey metadata, then unavailable. Rates use a normalized `provider:model` key:
 
 ```php
-$laravelAiPricing = new Jkudish\LaravelAiPricing();
-echo $laravelAiPricing->echoPhrase('Hello, Jkudish!');
+'prices' => [
+    'openrouter:google/gemini-3-flash' => [
+        'input_tokens' => ['amount' => '0.50', 'per' => '1000000', 'currency' => 'USD'],
+        'output_tokens' => ['amount' => '3.00', 'per' => '1000000', 'currency' => 'USD'],
+    ],
+],
 ```
 
-## Testing
+Aggregate precise `Money` values before applying a named `RoundingBoundary` with `Money::at()`. Mixed currencies throw, USD is the default, and v0.1 has no FX.
+
+## Catalog sync and offline operation
 
 ```bash
-composer test
+php artisan ai:pricing:sync
 ```
 
-## Changelog
+The command caches the OpenRouter official Models API and Portkey catalog through Laravel Cache. Set `ai-pricing.offline` to `true` to prevent network retrieval and rely on configured prices and existing cached catalogs. Catalog requests contain no prompts, outputs, fixtures, account data, or credentials. Provider/model identifiers are the only workload identifiers the pricing layer may transmit.
 
-Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
+Set `ai-pricing.portkey.providers` to the providers that `ai:pricing:sync` should prewarm. On-demand fallback lookup fetches only the requested provider's public Portkey catalog. Portkey publishes prices as cents per unit; the adapter converts them to USD-denominated decimal rates before any calculation.
 
-## Contributing
+Remote-derived quotes record the source URL, retrieval time, normalized definition, and SHA-256 snapshot fingerprint. Consumers should persist the quote with their evidence instead of assuming today's catalog describes an earlier run.
 
-Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
+## Observation adapters
 
-## Security Vulnerabilities
+`NormalizedObservationAdapter` accepts normalized Codex, Claude, Amp, gateway, and generic observations while preserving known and custom usage units. `LaravelAiObservationAdapter` uses structural adaptation and has no hard runtime dependency on `laravel/ai`.
 
-Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
+## Compatibility
 
-## Credits
-
-- [Joey Kudish](https://github.com/jkudish)
-- [All Contributors](../../contributors)
-
-## License
-
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+The runtime package supports PHP 8.4+, Laravel 12 and 13, and has no dependency on Pest. Its development suite uses Pest 5/PHPUnit 13 with Laravel 13/Testbench 11. Pest 5 currently requires Symfony Process 8.1 while Laravel 12/Testbench 10 requires Symfony Process 7.2, so CI verifies Laravel 12 through a clean consumer installation without this repository's development dependencies.
