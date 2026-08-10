@@ -71,6 +71,17 @@ Remote-derived quotes record the source URL, retrieval time, normalized definiti
 
 `NormalizedObservationAdapter` accepts normalized Codex, Claude, Amp, gateway, and generic observations while preserving known and custom usage units. `LaravelAiObservationAdapter` uses structural adaptation and has no hard runtime dependency on `laravel/ai`.
 
+For synchronous Laravel AI text responses, the Laravel adapter also reads public raw responses. OpenRouter's authoritative `usage.cost` is summed across every generation step and takes precedence over catalog pricing. If any step is missing cost, the adapter falls back to usage-based resolution rather than presenting a partial amount as the total.
+
+```php
+$observation = (new LaravelAiObservationAdapter)->adapt($response);
+$quote = app(CostResolver::class)->resolve($observation);
+```
+
+OpenAI, Anthropic, Gemini, Groq, DeepSeek, Mistral, xAI, Cohere, and the other built-in providers currently expose billable usage rather than per-response money. Their observations therefore use the same normalized usage contract and resolve against configured or remote catalog pricing. Custom Laravel AI drivers can inject an explicit response path through `LaravelAiProviderCostExtractor`; arbitrary fields are never guessed to be authoritative cost.
+
+Laravel AI does not preserve raw streaming bodies. For OpenRouter streams, capture the `X-Generation-Id` header without reading the stream and retrieve authoritative cost from OpenRouter's generation endpoint after completion. Failed or blocked requests may be billed without exposing usage; consumers should not record them as zero-cost.
+
 ## Compatibility
 
 The runtime package supports PHP 8.4+, Laravel 12 and 13, and has no dependency on Pest. Its development suite uses Pest 5/PHPUnit 13 with Laravel 13/Testbench 11. Pest 5 currently requires Symfony Process 8.1 while Laravel 12/Testbench 10 requires Symfony Process 7.2, so CI verifies Laravel 12 through a clean consumer installation without this repository's development dependencies.

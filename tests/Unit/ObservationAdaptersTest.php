@@ -7,6 +7,7 @@ use Jkudish\LaravelAiPricing\Adapters\ClaudeObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\CodexObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\GatewayObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\LaravelAiObservationAdapter;
+use Jkudish\LaravelAiPricing\Adapters\LaravelAiProviderCostExtractor;
 use Jkudish\LaravelAiPricing\Adapters\NormalizedObservationAdapter;
 
 it('normalizes common provider usage shapes without losing custom units', function (object $adapter): void {
@@ -279,3 +280,93 @@ it('gives an explicit Laravel AI input token semantic precedence and validates i
             'usage' => ['promptTokens' => 100],
         ]))->toThrow(InvalidArgumentException::class, 'must be either [inclusive] or [exclusive]');
 });
+
+it('uses provider-reported OpenRouter cost from every public Laravel AI step', function (): void {
+    $response = new class
+    {
+        public object $usage;
+
+        public object $meta;
+
+        /** @var list<object> */
+        public array $steps;
+
+        public function __construct()
+        {
+            $this->usage = (object) ['promptTokens' => 20, 'completionTokens' => 5];
+            $this->meta = (object) ['provider' => 'openrouter', 'model' => 'openai/gpt-test'];
+            $this->steps = [
+                (object) ['raw' => new ProviderResponseFixture(['usage' => ['cost' => '0.0000012']])],
+                (object) ['raw' => new ProviderResponseFixture(['usage' => ['cost' => 0.0000034]])],
+            ];
+        }
+    };
+
+    $observation = (new LaravelAiObservationAdapter)->adapt($response);
+
+    expect($observation->providerReportedCost?->toArray())->toBe([
+        'amount' => '0.0000046',
+        'currency' => 'USD',
+    ]);
+});
+
+it('does not misrepresent a partial multi-step provider cost as authoritative', function (): void {
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 20, 'completionTokens' => 5],
+        'meta' => (object) ['provider' => 'openrouter', 'model' => 'openai/gpt-test'],
+        'steps' => [
+            (object) ['raw' => new ProviderResponseFixture(['usage' => ['cost' => '0.1']])],
+            (object) ['raw' => new ProviderResponseFixture(['usage' => ['prompt_tokens' => 10]])],
+        ],
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost)->toBeNull();
+});
+
+it('only extracts monetary cost from providers with an explicit response contract', function (string $provider, array $payload): void {
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 10, 'completionTokens' => 2],
+        'meta' => (object) ['provider' => $provider, 'model' => 'model'],
+        'raw' => new ProviderResponseFixture($payload),
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost)->toBeNull();
+})->with([
+    'OpenAI usage' => ['openai', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'Anthropic usage' => ['anthropic', ['usage' => ['input_tokens' => 10, 'output_tokens' => 2]]],
+    'Gemini usage' => ['gemini', ['usageMetadata' => ['promptTokenCount' => 10, 'candidatesTokenCount' => 2]]],
+    'Groq usage' => ['groq', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'DeepSeek usage' => ['deepseek', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'Mistral usage' => ['mistral', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'xAI usage' => ['xai', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'Cohere billed units' => ['cohere', ['meta' => ['billed_units' => ['input_tokens' => 10, 'output_tokens' => 2]]]],
+]);
+
+it('supports explicit provider cost paths for custom Laravel AI drivers', function (): void {
+    $extractor = new LaravelAiProviderCostExtractor([
+        'private-gateway' => ['path' => 'billing.amount', 'currency' => 'CAD'],
+    ]);
+    $adapter = new LaravelAiObservationAdapter(providerCosts: $extractor);
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 10],
+        'meta' => (object) ['provider' => 'private-gateway', 'model' => 'model'],
+        'raw' => new ProviderResponseFixture(['billing' => ['amount' => '0.25']]),
+    ];
+
+    expect($adapter->adapt($response)->providerReportedCost?->toArray())->toBe([
+        'amount' => '0.25',
+        'currency' => 'CAD',
+    ]);
+});
+
+final class ProviderResponseFixture
+{
+    /** @param array<string, mixed> $payload */
+    public function __construct(private readonly array $payload) {}
+
+    /** @return array<string, mixed> */
+    public function json(): array
+    {
+        return $this->payload;
+    }
+}

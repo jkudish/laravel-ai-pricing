@@ -7,7 +7,6 @@ namespace Jkudish\LaravelAiPricing\Adapters;
 use InvalidArgumentException;
 use Jkudish\LaravelAiPricing\ValueObjects\PricingObservation;
 use Override;
-use ReflectionObject;
 
 final class LaravelAiObservationAdapter implements ObservationAdapter
 {
@@ -16,6 +15,7 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
     /** @param array<string, string> $providerDrivers */
     public function __construct(
         private readonly NormalizedObservationAdapter $normalized = new NormalizedObservationAdapter,
+        private readonly LaravelAiProviderCostExtractor $providerCosts = new LaravelAiProviderCostExtractor,
         private readonly array $providerDrivers = [],
     ) {
         foreach ($this->providerDrivers as $provider => $driver) {
@@ -41,10 +41,20 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             throw new InvalidArgumentException('Laravel AI observation does not expose usage metadata.');
         }
 
+        $provider = $data['effectiveProvider'] ?? $data['effective_provider'] ?? $data['provider'] ?? null;
+
+        if (! isset($data['cost']) && ! isset($data['provider_cost']) && is_string($provider)) {
+            $providerCost = $this->providerCosts->extract($value, $provider);
+
+            if ($providerCost !== null) {
+                $data['cost'] = (string) $providerCost->amount;
+                $data['currency'] = $providerCost->currency;
+            }
+        }
+
         $usage = is_object($data['usage']) ? get_object_vars($data['usage']) : $data['usage'];
 
         if (is_array($usage)) {
-            $provider = $data['effectiveProvider'] ?? $data['effective_provider'] ?? $data['provider'] ?? null;
             $inclusive = $this->usesInclusivePromptTokens($data, $provider);
             $prompt = $usage['promptTokens'] ?? $usage['inputTokens'] ?? $usage['prompt_tokens'] ?? $usage['input_tokens'] ?? 0;
             $read = $usage['cacheReadInputTokens'] ?? $usage['cache_read_input_tokens'] ?? 0;
@@ -123,19 +133,6 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
     /** @return array<string, mixed> */
     private function objectData(object $value): array
     {
-        $data = get_object_vars($value);
-        $reflection = new ReflectionObject($value);
-
-        foreach (['provider', 'model', 'effectiveProvider', 'effectiveModel', 'requestedProvider', 'requestedModel', 'usage', 'meta', 'cost', 'currency', 'driver', 'provider_driver', 'providerDriver', 'input_token_semantic', 'inputTokenSemantic'] as $property) {
-            if (! array_key_exists($property, $data) && $reflection->hasProperty($property)) {
-                $reflectionProperty = $reflection->getProperty($property);
-
-                if ($reflectionProperty->isInitialized($value)) {
-                    $data[$property] = $reflectionProperty->getValue($value);
-                }
-            }
-        }
-
-        return $this->record($data);
+        return $this->record(get_object_vars($value));
     }
 }
