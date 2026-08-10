@@ -69,7 +69,22 @@ Remote-derived quotes record the source URL, retrieval time, normalized definiti
 
 ## Observation adapters
 
-`NormalizedObservationAdapter` accepts normalized Codex, Claude, Amp, gateway, and generic observations while preserving known and custom usage units. `LaravelAiObservationAdapter` uses structural adaptation and has no hard runtime dependency on `laravel/ai`.
+`NormalizedObservationAdapter` accepts normalized Codex, Claude, Amp, gateway, and generic observations while preserving known and custom usage units. `LaravelAiObservationAdapter` uses Laravel AI's public response properties through structural adaptation and has no hard runtime dependency on `laravel/ai`. It deliberately does not inspect private SDK state.
+
+For synchronous Laravel AI text responses, the Laravel adapter also reads public raw responses. OpenRouter's authoritative `usage.cost` is summed across every generation step and takes precedence over catalog pricing. Laravel AI v0.10.3 or newer is required for public raw step responses; v0.10.2 and earlier continue to resolve from normalized usage and catalogs. If any step is missing cost, the adapter falls back to usage-based resolution rather than presenting a partial amount as the total.
+
+```php
+$observation = (new LaravelAiObservationAdapter)->adapt($response);
+$quote = app(CostResolver::class)->resolve($observation);
+```
+
+OpenAI, Anthropic, Gemini, Groq, DeepSeek, Mistral, xAI, Cohere, Bedrock, and the other built-in providers currently expose billable usage rather than per-response money. Their observations therefore use the same normalized usage contract and resolve against configured or remote catalog pricing. Bedrock text usage includes input, output, cache-read, and cache-write tokens and can resolve against Portkey's `bedrock` catalog when the model ID matches; inference-profile aliases and region-specific rates can be supplied through configured prices. Laravel AI embedding responses map their exposed token count to input-token usage, while image and transcription responses use their public `Usage` objects.
+
+When a custom driver reports prompt tokens inclusively or exclusively in a way the adapter cannot infer, pass `inputTokenSemantic` (or `input_token_semantic`) as `inclusive` or `exclusive` on the structural observation. Derived aggregate fields such as `totalTokens` are ignored because pricing is calculated from the individual billable units.
+
+Laravel AI audio and reranking responses currently expose provider/model identity but no usage quantity. Consumers can record a workload-specific unit such as `audio_seconds` or `rerank_requests` through `NormalizedObservationAdapter` and price it with an application-configured rate. The package does not infer missing quantities or assign a monetary cost to local Ollama workloads, but Ollama token usage is retained and can be priced explicitly when a consumer has a meaningful internal rate. Custom Laravel AI drivers can inject an explicit response cost path through `LaravelAiProviderCostExtractor`; arbitrary fields are never guessed to be authoritative cost.
+
+Laravel AI does not preserve raw streaming bodies. For OpenRouter streams, capture the `X-Generation-Id` header without reading the stream and retrieve authoritative cost from OpenRouter's generation endpoint after completion. Failed or blocked requests may be billed without exposing usage; consumers should not record them as zero-cost.
 
 ## Compatibility
 

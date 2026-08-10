@@ -146,6 +146,30 @@ it('reads Portkey fallback pricing from a fixture-compatible catalog', function 
         && ! $request->hasHeader('Authorization'));
 });
 
+it('matches Bedrock usage to its Portkey model catalog', function (): void {
+    Http::fake([
+        'https://portkey.test/pricing/bedrock.json' => Http::response([
+            'amazon.titan-text-lite-v1' => [
+                'pricing_config' => [
+                    'pay_as_you_go' => [
+                        'request_token' => ['price' => '0.000015'],
+                        'response_token' => ['price' => '0.00002'],
+                    ],
+                    'currency' => 'USD',
+                ],
+            ],
+        ]),
+    ]);
+
+    $definition = portkeySource()->find(new ModelIdentity('bedrock', 'amazon.titan-text-lite-v1'));
+
+    expect($definition?->source)->toBe(PricingSource::Portkey)
+        ->and((string) $definition?->rates['input_tokens']->amount)->toBe('0.00000015')
+        ->and((string) $definition?->rates['output_tokens']->amount)->toBe('0.0000002');
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://portkey.test/pricing/bedrock.json');
+});
+
 it('syncs only explicitly configured Portkey providers', function (): void {
     Http::fake([
         'https://portkey.test/pricing/openai.json' => Http::response(['gpt-test' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => '0.1']]]]]),

@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
+use GuzzleHttp\Psr7\Response as Psr7Response;
+use Illuminate\Http\Client\Response as HttpResponse;
+use Illuminate\Support\Collection;
 use Jkudish\LaravelAiPricing\Adapters\AmpObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\ClaudeObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\CodexObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\GatewayObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\LaravelAiObservationAdapter;
+use Jkudish\LaravelAiPricing\Adapters\LaravelAiProviderCostExtractor;
 use Jkudish\LaravelAiPricing\Adapters\NormalizedObservationAdapter;
 
 it('normalizes common provider usage shapes without losing custom units', function (object $adapter): void {
@@ -195,6 +199,7 @@ it('maps real Laravel AI cache usage without double billing provider input', fun
             'cacheWriteInputTokens' => 10,
             'cacheReadInputTokens' => 30,
             'reasoningTokens' => 5,
+            'totalTokens' => 160,
         ],
     ];
 
@@ -211,10 +216,12 @@ it('maps real Laravel AI cache usage without double billing provider input', fun
         'cached_input_tokens' => '30',
         'cache_write_input_tokens' => '10',
         'reasoning_tokens' => '5',
-    ]);
+    ])->not->toHaveKey('totalTokens');
 })->with([
     'OpenAI object reports exclusive input' => ['openai', 100, false],
     'OpenAI array reports exclusive input' => ['openai', 100, true],
+    'Bedrock object reports exclusive input' => ['bedrock', 100, false],
+    'Bedrock array reports exclusive input' => ['bedrock', 100, true],
     'OpenRouter object reports inclusive prompt' => ['openrouter', 60, false],
     'OpenRouter array reports inclusive prompt' => ['openrouter', 60, true],
     'Groq object reports inclusive prompt' => ['groq', 60, false],
@@ -279,3 +286,230 @@ it('gives an explicit Laravel AI input token semantic precedence and validates i
             'usage' => ['promptTokens' => 100],
         ]))->toThrow(InvalidArgumentException::class, 'must be either [inclusive] or [exclusive]');
 });
+
+it('uses provider-reported OpenRouter cost from every public Laravel AI step', function (): void {
+    $response = new class
+    {
+        public object $usage;
+
+        public object $meta;
+
+        /** @var list<object> */
+        public array $steps;
+
+        public function __construct()
+        {
+            $this->usage = (object) ['promptTokens' => 20, 'completionTokens' => 5];
+            $this->meta = (object) ['provider' => 'openrouter', 'model' => 'openai/gpt-test'];
+            $this->steps = [
+                (object) ['raw' => new ProviderResponseFixture(['usage' => ['cost' => '0.0000012']])],
+                (object) ['raw' => new ProviderResponseFixture(['usage' => ['cost' => 0.0000034]])],
+            ];
+        }
+    };
+
+    $observation = (new LaravelAiObservationAdapter)->adapt($response);
+
+    expect($observation->providerReportedCost?->toArray())->toBe([
+        'amount' => '0.0000046',
+        'currency' => 'USD',
+    ]);
+});
+
+it('reads OpenRouter cost from real Illuminate HTTP responses and collections', function (): void {
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 10, 'completionTokens' => 2],
+        'meta' => (object) ['provider' => 'openrouter', 'model' => 'openai/gpt-test'],
+        'steps' => new Collection([
+            (object) ['raw' => new HttpResponse(new Psr7Response(
+                body: '{"usage":{"cost":0.0000042}}',
+                headers: ['Content-Type' => 'application/json'],
+            ))],
+        ]),
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost?->toArray())->toBe([
+        'amount' => '0.0000042',
+        'currency' => 'USD',
+    ]);
+});
+
+it('does not misrepresent a partial multi-step provider cost as authoritative', function (): void {
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 20, 'completionTokens' => 5],
+        'meta' => (object) ['provider' => 'openrouter', 'model' => 'openai/gpt-test'],
+        'steps' => [
+            (object) ['raw' => new ProviderResponseFixture(['usage' => ['cost' => '0.1']])],
+            (object) ['raw' => new ProviderResponseFixture(['usage' => ['prompt_tokens' => 10]])],
+        ],
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost)->toBeNull();
+});
+
+it('only extracts monetary cost from providers with an explicit response contract', function (string $provider, array $payload): void {
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 10, 'completionTokens' => 2],
+        'meta' => (object) ['provider' => $provider, 'model' => 'model'],
+        'raw' => new ProviderResponseFixture($payload),
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost)->toBeNull();
+})->with([
+    'OpenAI usage' => ['openai', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'Anthropic usage' => ['anthropic', ['usage' => ['input_tokens' => 10, 'output_tokens' => 2]]],
+    'Gemini usage' => ['gemini', ['usageMetadata' => ['promptTokenCount' => 10, 'candidatesTokenCount' => 2]]],
+    'Groq usage' => ['groq', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'DeepSeek usage' => ['deepseek', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'Mistral usage' => ['mistral', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'xAI usage' => ['xai', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
+    'Cohere billed units' => ['cohere', ['meta' => ['billed_units' => ['input_tokens' => 10, 'output_tokens' => 2]]]],
+    'Bedrock usage' => ['bedrock', ['usage' => ['inputTokens' => 10, 'outputTokens' => 2]]],
+]);
+
+it('maps Laravel AI embedding token usage without inventing output usage', function (): void {
+    $response = (object) [
+        'tokens' => 42,
+        'meta' => (object) ['provider' => 'bedrock', 'model' => 'amazon.titan-embed-text-v1'],
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->usage->toArray())->toBe([
+        'input_tokens' => '42',
+        'cached_input_tokens' => '0',
+        'cache_write_input_tokens' => '0',
+    ]);
+});
+
+it('rejects malformed Laravel AI embedding token usage', function (mixed $tokens): void {
+    $response = (object) [
+        'tokens' => $tokens,
+        'meta' => (object) ['provider' => 'bedrock', 'model' => 'amazon.titan-embed-text-v1'],
+    ];
+
+    expect(fn () => (new LaravelAiObservationAdapter)->adapt($response))
+        ->toThrow(InvalidArgumentException::class, 'embedding token usage');
+})->with([
+    'negative' => -1,
+    'numeric string' => '42',
+    'float' => 42.0,
+    'null' => null,
+    'boolean' => true,
+]);
+
+it('prefers explicit Laravel AI usage over an unrelated tokens field', function (): void {
+    $response = (object) [
+        'tokens' => 999,
+        'usage' => (object) ['promptTokens' => 12, 'completionTokens' => 3],
+        'meta' => (object) ['provider' => 'openai', 'model' => 'gpt-test'],
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->usage->toArray())->toMatchArray([
+        'input_tokens' => '12',
+        'output_tokens' => '3',
+    ])->not->toHaveKey('tokens');
+});
+
+it('supports explicit provider cost paths for custom Laravel AI drivers', function (): void {
+    $extractor = new LaravelAiProviderCostExtractor([
+        'private-gateway' => ['path' => 'billing.amount', 'currency' => 'CAD'],
+    ]);
+    $adapter = new LaravelAiObservationAdapter(providerCosts: $extractor);
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 10],
+        'meta' => (object) ['provider' => 'private-gateway', 'model' => 'model'],
+        'raw' => new ProviderResponseFixture(['billing' => ['amount' => '0.25']]),
+    ];
+
+    expect($adapter->adapt($response)->providerReportedCost?->toArray())->toBe([
+        'amount' => '0.25',
+        'currency' => 'CAD',
+    ]);
+});
+
+it('degrades malformed provider cost to usage pricing without throwing', function (mixed $cost): void {
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 10],
+        'meta' => (object) ['provider' => 'openrouter', 'model' => 'model'],
+        'raw' => new ProviderResponseFixture(['usage' => ['cost' => $cost]]),
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost)->toBeNull();
+})->with([
+    'negative' => '-0.1',
+    'not numeric' => 'N/A',
+    'unbounded exponent' => '1e-40000000',
+    'overlong decimal' => str_repeat('1', 65),
+]);
+
+it('extracts provider floats independently of the PHP serialization precision', function (): void {
+    $previous = ini_set('serialize_precision', '17');
+
+    try {
+        $response = (object) [
+            'usage' => (object) ['promptTokens' => 10],
+            'meta' => (object) ['provider' => 'openrouter', 'model' => 'model'],
+            'raw' => new ProviderResponseFixture(['usage' => ['cost' => 0.1]]),
+        ];
+
+        expect((string) (new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost?->amount)->toBe('0.1');
+    } finally {
+        if ($previous !== false) {
+            ini_set('serialize_precision', $previous);
+        }
+    }
+});
+
+it('requires Laravel AI observation properties to be public', function (): void {
+    $response = new class
+    {
+        private object $usage;
+
+        public object $meta;
+
+        public function __construct()
+        {
+            $this->usage = (object) ['promptTokens' => 10];
+            $this->meta = (object) ['provider' => 'openrouter', 'model' => 'model'];
+        }
+    };
+
+    expect(fn () => (new LaravelAiObservationAdapter)->adapt($response))
+        ->toThrow(InvalidArgumentException::class, 'does not expose usage metadata');
+});
+
+it('validates custom provider cost mappings when they are configured', function (array $providers): void {
+    expect(fn () => new LaravelAiProviderCostExtractor($providers))
+        ->toThrow(InvalidArgumentException::class);
+})->with([
+    'empty path' => [['provider' => ['path' => '']]],
+    'invalid currency' => [['provider' => ['path' => 'billing.cost', 'currency' => 'US']]],
+    'numeric provider' => [[0 => ['path' => 'billing.cost']]],
+    'duplicate normalized provider' => [[
+        'provider' => ['path' => 'billing.cost'],
+        'PROVIDER' => ['path' => 'usage.cost'],
+    ]],
+]);
+
+it('normalizes custom provider mapping names and supports bounded tiny costs', function (): void {
+    $extractor = new LaravelAiProviderCostExtractor([
+        'Private-Gateway' => ['path' => 'billing.amount', 'currency' => 'usd'],
+    ]);
+    $response = (object) ['raw' => new ProviderResponseFixture(['billing' => ['amount' => '1e-19']])];
+
+    expect($extractor->extract($response, 'private-gateway')?->toArray())->toBe([
+        'amount' => '0.0000000000000000001',
+        'currency' => 'USD',
+    ]);
+});
+
+final class ProviderResponseFixture
+{
+    /** @param array<string, mixed> $payload */
+    public function __construct(private readonly array $payload) {}
+
+    /** @return array<string, mixed> */
+    public function json(): array
+    {
+        return $this->payload;
+    }
+}
