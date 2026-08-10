@@ -15,8 +15,8 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
     /** @param array<string, string> $providerDrivers */
     public function __construct(
         private readonly NormalizedObservationAdapter $normalized = new NormalizedObservationAdapter,
-        private readonly LaravelAiProviderCostExtractor $providerCosts = new LaravelAiProviderCostExtractor,
         private readonly array $providerDrivers = [],
+        private readonly LaravelAiProviderCostExtractor $providerCosts = new LaravelAiProviderCostExtractor,
     ) {
         foreach ($this->providerDrivers as $provider => $driver) {
             if (trim($provider) === '' || trim($driver) === '') {
@@ -44,7 +44,7 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
         $provider = $data['effectiveProvider'] ?? $data['effective_provider'] ?? $data['provider'] ?? null;
 
         if (! isset($data['cost']) && ! isset($data['provider_cost']) && is_string($provider)) {
-            $providerCost = $this->providerCosts->extract($value, $provider);
+            $providerCost = $this->providerCosts->extract($data, $provider);
 
             if ($providerCost !== null) {
                 $data['cost'] = (string) $providerCost->amount;

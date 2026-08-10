@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use GuzzleHttp\Psr7\Response as Psr7Response;
+use Illuminate\Http\Client\Response as HttpResponse;
+use Illuminate\Support\Collection;
 use Jkudish\LaravelAiPricing\Adapters\AmpObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\ClaudeObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\CodexObservationAdapter;
@@ -310,6 +313,24 @@ it('uses provider-reported OpenRouter cost from every public Laravel AI step', f
     ]);
 });
 
+it('reads OpenRouter cost from real Illuminate HTTP responses and collections', function (): void {
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 10, 'completionTokens' => 2],
+        'meta' => (object) ['provider' => 'openrouter', 'model' => 'openai/gpt-test'],
+        'steps' => new Collection([
+            (object) ['raw' => new HttpResponse(new Psr7Response(
+                body: '{"usage":{"cost":0.0000042}}',
+                headers: ['Content-Type' => 'application/json'],
+            ))],
+        ]),
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost?->toArray())->toBe([
+        'amount' => '0.0000042',
+        'currency' => 'USD',
+    ]);
+});
+
 it('does not misrepresent a partial multi-step provider cost as authoritative', function (): void {
     $response = (object) [
         'usage' => (object) ['promptTokens' => 20, 'completionTokens' => 5],
@@ -358,6 +379,65 @@ it('supports explicit provider cost paths for custom Laravel AI drivers', functi
         'currency' => 'CAD',
     ]);
 });
+
+it('degrades malformed provider cost to usage pricing without throwing', function (mixed $cost): void {
+    $response = (object) [
+        'usage' => (object) ['promptTokens' => 10],
+        'meta' => (object) ['provider' => 'openrouter', 'model' => 'model'],
+        'raw' => new ProviderResponseFixture(['usage' => ['cost' => $cost]]),
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost)->toBeNull();
+})->with([
+    'negative' => '-0.1',
+    'not numeric' => 'N/A',
+    'unbounded exponent' => '1e-40000000',
+    'overlong decimal' => str_repeat('1', 65),
+]);
+
+it('extracts provider floats independently of the PHP serialization precision', function (): void {
+    $previous = ini_set('serialize_precision', '17');
+
+    try {
+        $response = (object) [
+            'usage' => (object) ['promptTokens' => 10],
+            'meta' => (object) ['provider' => 'openrouter', 'model' => 'model'],
+            'raw' => new ProviderResponseFixture(['usage' => ['cost' => 0.1]]),
+        ];
+
+        expect((string) (new LaravelAiObservationAdapter)->adapt($response)->providerReportedCost?->amount)->toBe('0.1');
+    } finally {
+        if ($previous !== false) {
+            ini_set('serialize_precision', $previous);
+        }
+    }
+});
+
+it('requires Laravel AI observation properties to be public', function (): void {
+    $response = new class
+    {
+        private object $usage;
+
+        public object $meta;
+
+        public function __construct()
+        {
+            $this->usage = (object) ['promptTokens' => 10];
+            $this->meta = (object) ['provider' => 'openrouter', 'model' => 'model'];
+        }
+    };
+
+    expect(fn () => (new LaravelAiObservationAdapter)->adapt($response))
+        ->toThrow(InvalidArgumentException::class, 'does not expose usage metadata');
+});
+
+it('validates custom provider cost mappings when they are configured', function (array $providers): void {
+    expect(fn () => new LaravelAiProviderCostExtractor($providers))
+        ->toThrow(InvalidArgumentException::class);
+})->with([
+    'empty path' => [['provider' => ['path' => '']]],
+    'invalid currency' => [['provider' => ['path' => 'billing.cost', 'currency' => 'US']]],
+]);
 
 final class ProviderResponseFixture
 {

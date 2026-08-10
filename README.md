@@ -69,7 +69,7 @@ Remote-derived quotes record the source URL, retrieval time, normalized definiti
 
 ## Observation adapters
 
-`NormalizedObservationAdapter` accepts normalized Codex, Claude, Amp, gateway, and generic observations while preserving known and custom usage units. `LaravelAiObservationAdapter` uses structural adaptation and has no hard runtime dependency on `laravel/ai`.
+`NormalizedObservationAdapter` accepts normalized Codex, Claude, Amp, gateway, and generic observations while preserving known and custom usage units. `LaravelAiObservationAdapter` uses Laravel AI's public response properties through structural adaptation and has no hard runtime dependency on `laravel/ai`. It deliberately does not inspect private SDK state.
 
 For synchronous Laravel AI text responses, the Laravel adapter also reads public raw responses. OpenRouter's authoritative `usage.cost` is summed across every generation step and takes precedence over catalog pricing. If any step is missing cost, the adapter falls back to usage-based resolution rather than presenting a partial amount as the total.
 

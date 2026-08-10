@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Jkudish\LaravelAiPricing\Adapters;
 
+use Brick\Math\BigDecimal;
 use Illuminate\Support\Enumerable;
+use InvalidArgumentException;
 use Jkudish\LaravelAiPricing\ValueObjects\Money;
 use Throwable;
 
@@ -15,7 +17,20 @@ final class LaravelAiProviderCostExtractor
         private readonly array $providers = [
             'openrouter' => ['path' => 'usage.cost', 'currency' => 'USD'],
         ],
-    ) {}
+    ) {
+        foreach ($this->providers as $provider => $definition) {
+            $path = $definition['path'] ?? null;
+            $currency = $definition['currency'] ?? 'USD';
+
+            if (trim($provider) === '' || ! is_string($path) || trim($path) === '') {
+                throw new InvalidArgumentException('Provider cost mappings require non-empty provider names and response paths.');
+            }
+
+            if (! is_string($currency) || ! preg_match('/^[A-Za-z]{3}$/', $currency)) {
+                throw new InvalidArgumentException('Provider cost mapping currency must be a three-letter ISO code.');
+            }
+        }
+    }
 
     /** @param array<string, mixed>|object $response */
     public function extract(array|object $response, string $provider): ?Money
@@ -92,18 +107,49 @@ final class LaravelAiProviderCostExtractor
             return null;
         }
 
-        $value = data_get($payload, $path);
+        return $this->decimal(data_get($payload, $path));
+    }
 
-        if (is_string($value) || is_int($value)) {
-            return $value;
+    private function decimal(mixed $value): string|int|null
+    {
+        if (is_int($value)) {
+            return $value >= 0 ? $value : null;
         }
 
-        if (! is_float($value) || ! is_finite($value)) {
+        if (is_float($value)) {
+            if (! is_finite($value) || $value < 0) {
+                return null;
+            }
+
+            $previousPrecision = ini_set('serialize_precision', '-1');
+
+            try {
+                $encoded = json_encode($value, JSON_PRESERVE_ZERO_FRACTION);
+            } finally {
+                if ($previousPrecision !== false) {
+                    ini_set('serialize_precision', $previousPrecision);
+                }
+            }
+
+            $value = $encoded;
+        }
+
+        if (! is_string($value)) {
             return null;
         }
 
-        $encoded = json_encode($value, JSON_PRESERVE_ZERO_FRACTION);
+        $value = trim($value);
 
-        return is_string($encoded) ? $encoded : null;
+        if (strlen($value) > 64
+            || ! preg_match('/^(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/', $value)
+            || preg_match('/[eE]([+-]?\d+)$/', $value, $matches) && abs((int) $matches[1]) > 18) {
+            return null;
+        }
+
+        try {
+            return BigDecimal::of($value)->isNegative() ? null : $value;
+        } catch (Throwable) {
+            return null;
+        }
     }
 }
