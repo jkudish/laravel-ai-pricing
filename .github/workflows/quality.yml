@@ -26,10 +26,10 @@ jobs:
         run: composer audit
 
       - name: Check formatting
-        run: vendor/bin/pint --test
+        run: composer lint:check
 
       - name: Run PHPStan and Larastan
-        run: vendor/bin/phpstan analyse --memory-limit=1G --error-format=github
+        run: composer analyse -- --error-format=github
 
       - name: Run architecture tests
         run: vendor/bin/pest tests/ArchTest.php --ci

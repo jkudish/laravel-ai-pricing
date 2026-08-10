@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-08-09
-
 ### Added
 
 - Decimal-safe AI cost attribution using `brick/math`.
@@ -19,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Laravel AI, Codex, Claude, Amp, gateway, and normalized observation adapters.
 - Cached catalogs, last-known-good fallback, and offline operation.
 - `ai:pricing:sync` for prewarming remote pricing catalogs.
-- Laravel 12 and 13 support on PHP 8.4 and newer.
+- Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/jkudish/laravel-ai-pricing/releases/tag/v0.1.0
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/commits/main

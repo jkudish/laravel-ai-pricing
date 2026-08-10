@@ -7,9 +7,6 @@
 <p align="center">
   <a href="https://github.com/jkudish/laravel-ai-pricing/actions/workflows/run-tests.yml"><img src="https://github.com/jkudish/laravel-ai-pricing/actions/workflows/run-tests.yml/badge.svg" alt="Tests"></a>
   <a href="https://github.com/jkudish/laravel-ai-pricing/actions/workflows/quality.yml"><img src="https://github.com/jkudish/laravel-ai-pricing/actions/workflows/quality.yml/badge.svg" alt="Quality"></a>
-  <a href="https://packagist.org/packages/jkudish/laravel-ai-pricing"><img src="https://img.shields.io/packagist/v/jkudish/laravel-ai-pricing" alt="Packagist version"></a>
-  <a href="https://packagist.org/packages/jkudish/laravel-ai-pricing"><img src="https://img.shields.io/packagist/dt/jkudish/laravel-ai-pricing" alt="Packagist downloads"></a>
-  <img src="https://img.shields.io/packagist/php-v/jkudish/laravel-ai-pricing" alt="PHP version">
   <a href="LICENSE.md"><img src="https://img.shields.io/github/license/jkudish/laravel-ai-pricing" alt="License"></a>
 </p>
 
@@ -18,6 +15,10 @@ AI providers report usage and pricing in different shapes, units, currencies, an
 The package has no database, records no prompts or outputs, performs no currency conversion, and never requires pricing to be available for the caller to continue.
 
 ## Installation
+
+> **Pre-release:** version 0.1 is feature-complete and being prepared for its first Packagist release.
+
+Once version 0.1 is published:
 
 ```bash
 composer require jkudish/laravel-ai-pricing
@@ -160,10 +161,11 @@ Mixed-currency arithmetic throws. USD is the default and version 0.1 performs no
 ## Compatibility
 
 - PHP 8.4 and newer.
-- Laravel 12 and 13.
+- Laravel 13 for the full development and test matrix.
+- Laravel 12 for clean consumer installation, package discovery, and command registration.
 - No runtime dependency on Pest or Laravel AI.
 
-The development suite uses Pest 5, PHPUnit 13, Laravel 13, and Testbench 11. CI also verifies installation inside a clean Laravel 12 consumer without this repository's Pest 5 development dependencies.
+The development suite uses Pest 5, PHPUnit 13, Laravel 13, and Testbench 11. Because Pest 5's Symfony Process constraint conflicts with Laravel 12's development stack, CI verifies Laravel 12 through a clean consumer installation without this repository's development dependencies.
 
 ## Stability
 
