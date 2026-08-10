@@ -37,6 +37,14 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             $data = $this->record([...$data['meta'], ...$data]);
         }
 
+        if (! isset($data['usage']) && array_key_exists('tokens', $data)) {
+            if (! is_int($data['tokens']) || $data['tokens'] < 0) {
+                throw new InvalidArgumentException('Laravel AI embedding token usage must be a non-negative integer.');
+            }
+
+            $data['usage'] = ['input_tokens' => $data['tokens']];
+        }
+
         if (! isset($data['usage'])) {
             throw new InvalidArgumentException('Laravel AI observation does not expose usage metadata.');
         }

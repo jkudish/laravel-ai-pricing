@@ -219,6 +219,8 @@ it('maps real Laravel AI cache usage without double billing provider input', fun
 })->with([
     'OpenAI object reports exclusive input' => ['openai', 100, false],
     'OpenAI array reports exclusive input' => ['openai', 100, true],
+    'Bedrock object reports exclusive input' => ['bedrock', 100, false],
+    'Bedrock array reports exclusive input' => ['bedrock', 100, true],
     'OpenRouter object reports inclusive prompt' => ['openrouter', 60, false],
     'OpenRouter array reports inclusive prompt' => ['openrouter', 60, true],
     'Groq object reports inclusive prompt' => ['groq', 60, false],
@@ -361,6 +363,33 @@ it('only extracts monetary cost from providers with an explicit response contrac
     'Mistral usage' => ['mistral', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
     'xAI usage' => ['xai', ['usage' => ['prompt_tokens' => 10, 'completion_tokens' => 2]]],
     'Cohere billed units' => ['cohere', ['meta' => ['billed_units' => ['input_tokens' => 10, 'output_tokens' => 2]]]],
+    'Bedrock usage' => ['bedrock', ['usage' => ['inputTokens' => 10, 'outputTokens' => 2]]],
+]);
+
+it('maps Laravel AI embedding token usage without inventing output usage', function (): void {
+    $response = (object) [
+        'tokens' => 42,
+        'meta' => (object) ['provider' => 'bedrock', 'model' => 'amazon.titan-embed-text-v1'],
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->usage->toArray())->toBe([
+        'input_tokens' => '42',
+        'cached_input_tokens' => '0',
+        'cache_write_input_tokens' => '0',
+    ]);
+});
+
+it('rejects malformed Laravel AI embedding token usage', function (mixed $tokens): void {
+    $response = (object) [
+        'tokens' => $tokens,
+        'meta' => (object) ['provider' => 'bedrock', 'model' => 'amazon.titan-embed-text-v1'],
+    ];
+
+    expect(fn () => (new LaravelAiObservationAdapter)->adapt($response))
+        ->toThrow(InvalidArgumentException::class, 'embedding token usage');
+})->with([
+    'negative' => -1,
+    'numeric string' => '42',
 ]);
 
 it('supports explicit provider cost paths for custom Laravel AI drivers', function (): void {
