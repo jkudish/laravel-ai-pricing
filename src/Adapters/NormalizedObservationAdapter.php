@@ -64,7 +64,11 @@ class NormalizedObservationAdapter implements ObservationAdapter
             'images' => ['images', 'image_count'],
             'audio_seconds' => ['audio_seconds', 'audioSeconds'],
         ];
-        $knownKeys = array_merge(...array_values($aliases));
+        $knownKeys = [
+            ...array_merge(...array_values($aliases)),
+            'total_tokens',
+            'totalTokens',
+        ];
         $units = [];
 
         foreach ($aliases as $unit => $keys) {

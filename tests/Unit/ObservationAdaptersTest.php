@@ -199,6 +199,7 @@ it('maps real Laravel AI cache usage without double billing provider input', fun
             'cacheWriteInputTokens' => 10,
             'cacheReadInputTokens' => 30,
             'reasoningTokens' => 5,
+            'totalTokens' => 160,
         ],
     ];
 
@@ -215,7 +216,7 @@ it('maps real Laravel AI cache usage without double billing provider input', fun
         'cached_input_tokens' => '30',
         'cache_write_input_tokens' => '10',
         'reasoning_tokens' => '5',
-    ]);
+    ])->not->toHaveKey('totalTokens');
 })->with([
     'OpenAI object reports exclusive input' => ['openai', 100, false],
     'OpenAI array reports exclusive input' => ['openai', 100, true],
@@ -390,7 +391,23 @@ it('rejects malformed Laravel AI embedding token usage', function (mixed $tokens
 })->with([
     'negative' => -1,
     'numeric string' => '42',
+    'float' => 42.0,
+    'null' => null,
+    'boolean' => true,
 ]);
+
+it('prefers explicit Laravel AI usage over an unrelated tokens field', function (): void {
+    $response = (object) [
+        'tokens' => 999,
+        'usage' => (object) ['promptTokens' => 12, 'completionTokens' => 3],
+        'meta' => (object) ['provider' => 'openai', 'model' => 'gpt-test'],
+    ];
+
+    expect((new LaravelAiObservationAdapter)->adapt($response)->usage->toArray())->toMatchArray([
+        'input_tokens' => '12',
+        'output_tokens' => '3',
+    ])->not->toHaveKey('tokens');
+});
 
 it('supports explicit provider cost paths for custom Laravel AI drivers', function (): void {
     $extractor = new LaravelAiProviderCostExtractor([
