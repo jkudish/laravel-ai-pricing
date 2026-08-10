@@ -437,7 +437,24 @@ it('validates custom provider cost mappings when they are configured', function 
 })->with([
     'empty path' => [['provider' => ['path' => '']]],
     'invalid currency' => [['provider' => ['path' => 'billing.cost', 'currency' => 'US']]],
+    'numeric provider' => [[0 => ['path' => 'billing.cost']]],
+    'duplicate normalized provider' => [[
+        'provider' => ['path' => 'billing.cost'],
+        'PROVIDER' => ['path' => 'usage.cost'],
+    ]],
 ]);
+
+it('normalizes custom provider mapping names and supports bounded tiny costs', function (): void {
+    $extractor = new LaravelAiProviderCostExtractor([
+        'Private-Gateway' => ['path' => 'billing.amount', 'currency' => 'usd'],
+    ]);
+    $response = (object) ['raw' => new ProviderResponseFixture(['billing' => ['amount' => '1e-19']])];
+
+    expect($extractor->extract($response, 'private-gateway')?->toArray())->toBe([
+        'amount' => '0.0000000000000000001',
+        'currency' => 'USD',
+    ]);
+});
 
 final class ProviderResponseFixture
 {

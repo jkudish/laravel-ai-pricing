@@ -12,24 +12,39 @@ use Throwable;
 
 final class LaravelAiProviderCostExtractor
 {
-    /** @param array<string, array<string, mixed>> $providers */
+    /** @var array<string, array{path: string, currency: string}> */
+    private readonly array $providers;
+
+    /** @param array<array-key, array<string, mixed>> $providers */
     public function __construct(
-        private readonly array $providers = [
+        array $providers = [
             'openrouter' => ['path' => 'usage.cost', 'currency' => 'USD'],
         ],
     ) {
-        foreach ($this->providers as $provider => $definition) {
+        $normalized = [];
+
+        foreach ($providers as $provider => $definition) {
             $path = $definition['path'] ?? null;
             $currency = $definition['currency'] ?? 'USD';
 
-            if (trim($provider) === '' || ! is_string($path) || trim($path) === '') {
+            if (! is_string($provider) || trim($provider) === '' || ! is_string($path) || trim($path) === '') {
                 throw new InvalidArgumentException('Provider cost mappings require non-empty provider names and response paths.');
             }
 
             if (! is_string($currency) || ! preg_match('/^[A-Za-z]{3}$/', $currency)) {
                 throw new InvalidArgumentException('Provider cost mapping currency must be a three-letter ISO code.');
             }
+
+            $provider = strtolower(trim($provider));
+
+            if (isset($normalized[$provider])) {
+                throw new InvalidArgumentException("Provider cost mapping [{$provider}] is configured more than once.");
+            }
+
+            $normalized[$provider] = ['path' => trim($path), 'currency' => strtoupper($currency)];
         }
+
+        $this->providers = $normalized;
     }
 
     /** @param array<string, mixed>|object $response */
@@ -78,17 +93,7 @@ final class LaravelAiProviderCostExtractor
     /** @return array{path: string, currency: string}|null */
     private function definition(string $provider): ?array
     {
-        $definition = $this->providers[strtolower($provider)] ?? null;
-
-        if (! is_array($definition) || ! is_string($definition['path'] ?? null)) {
-            return null;
-        }
-
-        $currency = $definition['currency'] ?? 'USD';
-
-        return is_string($currency)
-            ? ['path' => $definition['path'], 'currency' => $currency]
-            : null;
+        return $this->providers[strtolower(trim($provider))] ?? null;
     }
 
     private function extractRaw(mixed $raw, string $path): string|int|null
@@ -142,7 +147,7 @@ final class LaravelAiProviderCostExtractor
 
         if (strlen($value) > 64
             || ! preg_match('/^(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/', $value)
-            || preg_match('/[eE]([+-]?\d+)$/', $value, $matches) && abs((int) $matches[1]) > 18) {
+            || preg_match('/[eE]([+-]?\d+)$/', $value, $matches) && abs((int) $matches[1]) > 1024) {
             return null;
         }
 
