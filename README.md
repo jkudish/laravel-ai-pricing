@@ -51,15 +51,13 @@ $response = (new ReceiptOcrAgent)->stream($prompt);
 $response->then(function ($response): void {
     $cost = AiPricing::cost($response);
 
-    AgentRun::recordCost($cost->toArray());
+    // Persist $cost->toArray() with your application's job or agent-run record.
 });
 
 foreach ($response as $event) {
     // Send each stream event to the client.
 }
 ```
-
-Laravel AI does not currently offer a way for this package to add `$response->cost` directly to its response classes. The facade keeps the integration dependency-free, so Laravel AI remains an optional package dependency.
 
 ## What works by default
 
@@ -111,11 +109,13 @@ Treat a result as request evidence, not a current price lookup. Persist it with 
 $response = $agent->prompt($prompt);
 $cost = AiPricing::cost($response);
 
-AgentRun::create([
+$pricing = [
     'provider' => $response->meta->provider,
     'model' => $response->meta->model,
     'pricing' => $cost->toArray(),
-]);
+];
+
+// Store $pricing with the application record that represents this run.
 ```
 
 `toArray()` includes a `cost` object with amount and currency (or `null`), plus source, completeness, missing units, pricing snapshot, and provenance when available. A later catalog update therefore does not rewrite the evidence you recorded for an earlier request.
