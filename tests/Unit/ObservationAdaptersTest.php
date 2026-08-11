@@ -57,6 +57,24 @@ it('structurally adapts Laravel AI usage and meta without requiring laravel ai',
         ->and($observation->usage->toArray())->toMatchArray(['input_tokens' => '10', 'output_tokens' => '3']);
 });
 
+it('does not treat a private response property as authoritative provider cost', function (): void {
+    $value = new class
+    {
+        public string $provider = 'openai';
+
+        public string $model = 'gpt-test';
+
+        /** @var array<string, int> */
+        public array $usage = ['inputTokens' => 10, 'outputTokens' => 3];
+
+        private string $cost = '999.99';
+    };
+
+    $observation = (new LaravelAiObservationAdapter)->adapt($value);
+
+    expect($observation->providerReportedCost)->toBeNull();
+});
+
 it('adapts the nested meta and usage shape returned by Laravel AI responses', function (): void {
     $response = new class
     {
