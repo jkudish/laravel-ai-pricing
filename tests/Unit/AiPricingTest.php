@@ -28,7 +28,7 @@ it('resolves a completed Laravel AI response through the public cost API', funct
         public function __construct()
         {
             $this->meta = (object) ['provider' => 'openai', 'model' => 'gpt-test'];
-            $this->usage = (object) ['inputTokens' => 1_000, 'outputTokens' => 250];
+            $this->usage = (object) ['promptTokens' => 1_000, 'completionTokens' => 250];
         }
     };
 

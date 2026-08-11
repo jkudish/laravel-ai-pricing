@@ -35,7 +35,7 @@ $response = (new ReceiptOcrAgent)->prompt($prompt);
 
 $cost = AiPricing::cost($response);
 
-(string) $cost->amount;      // "0.0015", or null when pricing is unavailable
+$cost->amount;               // Brick\Math\BigDecimal, or null when pricing is unavailable
 $cost->currency;             // "USD", or null
 $cost->source;               // configured, provider_reported, provider_native, ...
 $cost->completeness;         // complete, partial, or unavailable
@@ -53,6 +53,10 @@ $response->then(function ($response): void {
 
     AgentRun::recordCost($cost->toArray());
 });
+
+foreach ($response as $event) {
+    // Send each stream event to the client.
+}
 ```
 
 Laravel AI does not currently offer a way for this package to add `$response->cost` directly to its response classes. The facade keeps the integration dependency-free, so Laravel AI remains an optional package dependency.
@@ -64,7 +68,7 @@ No configuration is required to call `AiPricing::cost()`.
 - The default currency is USD.
 - Laravel AI text and embedding responses are adapted from their public usage and metadata.
 - If a matching public catalog price is available, the result is attributed from usage.
-- Missing or incomplete pricing returns `unavailable` or `partial`; it never invents a zero cost.
+- When Laravel AI supplies usage, missing or incomplete pricing returns `unavailable` or `partial`; it never invents a zero cost.
 - The package stores no prompts or model outputs, has no database, and performs no currency conversion.
 
 For synchronous OpenRouter text responses on Laravel AI v0.10.3 or later, `usage.cost` in each public raw generation step is treated as provider-reported cost. It wins over every catalog. Other built-in providers currently expose billable usage rather than per-response money, so the package resolves their cost from usage and a configured or remote catalog.
@@ -114,7 +118,7 @@ AgentRun::create([
 ]);
 ```
 
-`toArray()` includes the amount, currency, source, completeness, pricing snapshot, and provenance when available. A later catalog update therefore does not rewrite the evidence you recorded for an earlier request.
+`toArray()` includes a `cost` object with amount and currency (or `null`), plus source, completeness, missing units, pricing snapshot, and provenance when available. A later catalog update therefore does not rewrite the evidence you recorded for an earlier request.
 
 This fits naturally in queued jobs, agent loops, evaluation suites, and budget reporting. For workloads with no Laravel AI response, use the lower-level resolver and an explicit `PricingObservation`.
 
