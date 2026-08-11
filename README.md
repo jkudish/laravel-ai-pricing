@@ -10,11 +10,9 @@
   <a href="LICENSE.md"><img src="https://img.shields.io/github/license/jkudish/laravel-ai-pricing" alt="License"></a>
 </p>
 
-AI providers report usage and pricing in different shapes, units, currencies, and levels of completeness. Laravel AI Pricing normalizes that evidence and resolves a cost quote without pretending missing information is zero.
+Laravel AI Pricing turns a completed Laravel AI response into a cost result you can record, display, or use to enforce a budget. It uses provider-reported cost when Laravel AI exposes it and otherwise attributes cost from the response's billable usage and a versioned pricing source.
 
-The package has no database, records no prompts or outputs, performs no currency conversion, and never requires pricing to be available for the caller to continue.
-
-## Installation
+## Install
 
 > **Pre-release:** version 0.1 is feature-complete and being prepared for its first Packagist release.
 
@@ -24,73 +22,74 @@ Once version 0.1 is published:
 composer require jkudish/laravel-ai-pricing
 ```
 
-The service provider is discovered automatically. Publish the configuration only when you need custom prices, endpoints, cache settings, or offline mode:
+The service provider is discovered automatically. Start without publishing configuration.
+
+## Use it with Laravel AI
+
+After your agent finishes, ask the package for the cost:
+
+```php
+use Jkudish\LaravelAiPricing\Facades\AiPricing;
+
+$response = (new ReceiptOcrAgent)->prompt($prompt);
+
+$cost = AiPricing::cost($response);
+
+(string) $cost->amount;      // "0.0015", or null when pricing is unavailable
+$cost->currency;             // "USD", or null
+$cost->source;               // configured, provider_reported, provider_native, ...
+$cost->completeness;         // complete, partial, or unavailable
+```
+
+`cost()` is for a completed response. It adapts Laravel AI's public response data, including the effective provider, model, and usage, then resolves the best compatible price. The returned `CostQuote` keeps the underlying `Money` value in `$cost->cost`, while `$cost->amount` and `$cost->currency` are convenient read-only aliases.
+
+For a streamed response, resolve the cost only after the stream has been consumed:
+
+```php
+$response = (new ReceiptOcrAgent)->stream($prompt);
+
+$response->then(function ($response): void {
+    $cost = AiPricing::cost($response);
+
+    AgentRun::recordCost($cost->toArray());
+});
+```
+
+Laravel AI does not currently offer a way for this package to add `$response->cost` directly to its response classes. The facade keeps the integration dependency-free, so Laravel AI remains an optional package dependency.
+
+## What works by default
+
+No configuration is required to call `AiPricing::cost()`.
+
+- The default currency is USD.
+- Laravel AI text and embedding responses are adapted from their public usage and metadata.
+- If a matching public catalog price is available, the result is attributed from usage.
+- Missing or incomplete pricing returns `unavailable` or `partial`; it never invents a zero cost.
+- The package stores no prompts or model outputs, has no database, and performs no currency conversion.
+
+For synchronous OpenRouter text responses on Laravel AI v0.10.3 or later, `usage.cost` in each public raw generation step is treated as provider-reported cost. It wins over every catalog. Other built-in providers currently expose billable usage rather than per-response money, so the package resolves their cost from usage and a configured or remote catalog.
+
+## Configure application prices
+
+Use application pricing when you need a specific model, region, inference profile, internal rate, or deterministic offline behavior. Publish the config:
 
 ```bash
 php artisan vendor:publish --tag=laravel-ai-pricing-config
 ```
 
-## Quick start
-
-```php
-use Jkudish\LaravelAiPricing\Contracts\CostResolver;
-use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
-use Jkudish\LaravelAiPricing\ValueObjects\PricingObservation;
-use Jkudish\LaravelAiPricing\ValueObjects\Usage;
-
-$quote = app(CostResolver::class)->resolve(new PricingObservation(
-    identity: new ModelIdentity('openrouter', 'google/gemini-3-flash'),
-    usage: Usage::tokens(input: 1_000, output: 250),
-));
-
-$quote->completeness;        // complete, partial, or unavailable
-$quote->cost?->amount;       // Brick\Math\BigDecimal
-$quote->source;              // configured, provider_native, portkey, ...
-$quote->snapshot?->fingerprint;
-```
-
-Missing pricing returns an unavailable quote. A partially priced workload reports the calculated amount and the missing usage units.
-
-## Why this package?
-
-| Problem | Laravel AI Pricing |
-| --- | --- |
-| Binary floating-point drift | Uses `brick/math` decimals throughout |
-| Provider/model routing | Preserves requested and effective identities |
-| Changing catalog prices | Captures an immutable pricing snapshot and retrieval time |
-| Missing rates | Reports `partial` or `unavailable`, never a misleading zero |
-| Multiple possible sources | Applies a documented resolution order |
-| CI and offline evaluation | Uses cached catalogs and last-known-good fallback |
-| Sensitive workload data | Sends only provider/model catalog requests, never prompts or outputs |
-
-## Resolution order
-
-The first compatible source wins:
-
-1. Provider-reported cost supplied with the observation.
-2. Application-configured pricing.
-3. Provider-native pricing supplied with the observation.
-4. OpenRouter's public model catalog for OpenRouter identities.
-5. Portkey's public provider catalogs as a fallback.
-6. An explicit unavailable quote.
-
-Catalog pricing in another currency is not silently converted or attributed.
-
-## Configure prices
-
-Rates use a normalized `provider:model` key. Amounts and divisors should be decimal strings when precision matters.
+Rates use a normalized `provider:model` key. Use decimal strings for values and divisors that need precision:
 
 ```php
 // config/ai-pricing.php
 'prices' => [
-    'openrouter:google/gemini-3-flash' => [
+    'openai:gpt-5-mini' => [
         'input_tokens' => [
-            'amount' => '0.50',
+            'amount' => '0.25',
             'per' => '1000000',
             'currency' => 'USD',
         ],
         'output_tokens' => [
-            'amount' => '3.00',
+            'amount' => '2.00',
             'per' => '1000000',
             'currency' => 'USD',
         ],
@@ -98,11 +97,68 @@ Rates use a normalized `provider:model` key. Amounts and divisors should be deci
 ],
 ```
 
-The package understands token units such as `input_tokens`, `output_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, and `reasoning_tokens`. Custom usage units are preserved and can be priced through configuration.
+Configured prices take precedence over catalog pricing, but never replace a compatible provider-reported cost. This makes configured rates appropriate for Bedrock aliases and region-specific models, or for a known internal price of local workloads such as Ollama.
 
-## Catalog sync and offline operation
+## Use it in agents, jobs, and evaluations
 
-Prewarm the configured remote catalogs:
+Treat a result as request evidence, not a current price lookup. Persist it with the work your agent performed:
+
+```php
+$response = $agent->prompt($prompt);
+$cost = AiPricing::cost($response);
+
+AgentRun::create([
+    'provider' => $response->meta->provider,
+    'model' => $response->meta->model,
+    'pricing' => $cost->toArray(),
+]);
+```
+
+`toArray()` includes the amount, currency, source, completeness, pricing snapshot, and provenance when available. A later catalog update therefore does not rewrite the evidence you recorded for an earlier request.
+
+This fits naturally in queued jobs, agent loops, evaluation suites, and budget reporting. For workloads with no Laravel AI response, use the lower-level resolver and an explicit `PricingObservation`.
+
+## Estimate before a request
+
+Use `quote()` when you want an estimate before a request is sent. It never claims to be what a provider charged:
+
+```php
+use Jkudish\LaravelAiPricing\Facades\AiPricing;
+use Jkudish\LaravelAiPricing\ValueObjects\Usage;
+
+$quote = AiPricing::quote(
+    provider: 'openai',
+    model: 'gpt-5-mini',
+    usage: Usage::tokens(input: 1_000, output: 250),
+);
+
+if ($quote->amount !== null && $quote->amount->isLessThan('0.01')) {
+    // Safe to continue according to this estimate.
+}
+```
+
+Use the completed response's `cost()` result for accounting. A quote is useful for guardrails, model selection, and expected-cost UI.
+
+## Pricing sources and accuracy
+
+The first compatible source wins:
+
+1. Provider-reported cost supplied with the response.
+2. Application-configured pricing.
+3. Provider-native pricing supplied with the observation.
+4. OpenRouter's public model catalog for OpenRouter identities.
+5. Portkey's public provider catalogs as a fallback.
+6. An explicit unavailable result.
+
+Catalog pricing in another currency is not silently converted or attributed. Decimal-safe arithmetic is used throughout; apply rounding explicitly at your display or billing boundary.
+
+Laravel AI's built-in OpenAI, Anthropic, Gemini, Groq, DeepSeek, Mistral, xAI, Cohere, and Bedrock providers currently provide usage quantities rather than response-level monetary cost. The package can match those provider and model identities to catalog prices. Embeddings expose input-token usage; image and transcription responses use their public `Usage` objects. Audio and reranking responses expose no billable quantity today, so supply an explicit workload unit and configured rate if you have one. The package does not infer a monetary cost for local Ollama execution.
+
+Failed or blocked requests may still be billable while provider usage is unavailable. Do not record those as zero-cost.
+
+## Catalogs and offline operation
+
+Prewarm the remote catalogs you use:
 
 ```bash
 php artisan ai:pricing:sync
@@ -119,28 +175,7 @@ php artisan ai:pricing:sync
 ],
 ```
 
-Offline mode performs no network retrieval. It uses configured prices and previously cached last-known-good catalogs. Remote-derived quotes retain the sanitized source URL, retrieval time, normalized definition, and snapshot fingerprint.
-
-Consumers should persist the quote alongside their own evidence instead of assuming today's catalog describes an earlier workload.
-
-## Observation adapters
-
-`NormalizedObservationAdapter` accepts normalized Codex, Claude, Amp, gateway, and generic observations while preserving known and custom usage units. `LaravelAiObservationAdapter` uses Laravel AI's public response properties through structural adaptation and has no hard runtime dependency on `laravel/ai`. It deliberately does not inspect private SDK state.
-
-For synchronous Laravel AI text responses, the Laravel adapter also reads public raw responses. OpenRouter's authoritative `usage.cost` is summed across every generation step and takes precedence over catalog pricing. Laravel AI v0.10.3 or newer is required for public raw step responses; v0.10.2 and earlier continue to resolve from normalized usage and catalogs. If any step is missing cost, the adapter falls back to usage-based resolution rather than presenting a partial amount as the total.
-
-```php
-$observation = (new LaravelAiObservationAdapter)->adapt($response);
-$quote = app(CostResolver::class)->resolve($observation);
-```
-
-OpenAI, Anthropic, Gemini, Groq, DeepSeek, Mistral, xAI, Cohere, Bedrock, and the other built-in providers currently expose billable usage rather than per-response money. Their observations therefore use the same normalized usage contract and resolve against configured or remote catalog pricing. Bedrock text usage includes input, output, cache-read, and cache-write tokens and can resolve against Portkey's `bedrock` catalog when the model ID matches; inference-profile aliases and region-specific rates can be supplied through configured prices. Laravel AI embedding responses map their exposed token count to input-token usage, while image and transcription responses use their public `Usage` objects.
-
-When a custom driver reports prompt tokens inclusively or exclusively in a way the adapter cannot infer, pass `inputTokenSemantic` (or `input_token_semantic`) as `inclusive` or `exclusive` on the structural observation. Derived aggregate fields such as `totalTokens` are ignored because pricing is calculated from the individual billable units.
-
-Laravel AI audio and reranking responses currently expose provider/model identity but no usage quantity. Consumers can record a workload-specific unit such as `audio_seconds` or `rerank_requests` through `NormalizedObservationAdapter` and price it with an application-configured rate. The package does not infer missing quantities or assign a monetary cost to local Ollama workloads, but Ollama token usage is retained and can be priced explicitly when a consumer has a meaningful internal rate. Custom Laravel AI drivers can inject an explicit response cost path through `LaravelAiProviderCostExtractor`; arbitrary fields are never guessed to be authoritative cost.
-
-Laravel AI does not preserve raw streaming bodies. For OpenRouter streams, capture the `X-Generation-Id` header without reading the stream and retrieve authoritative cost from OpenRouter's generation endpoint after completion. Failed or blocked requests may be billed without exposing usage; consumers should not record them as zero-cost.
+Offline mode performs no network retrieval. It uses configured prices and previously cached last-known-good catalogs. Remote-derived results retain the sanitized source URL, retrieval time, normalized definition, and snapshot fingerprint.
 
 ## Precision and rounding
 
@@ -150,7 +185,7 @@ Aggregate precise `Money` values before applying an explicit boundary:
 use Brick\Math\RoundingMode;
 use Jkudish\LaravelAiPricing\Enums\RoundingBoundary;
 
-$display = $quote->cost?->at(
+$display = $cost->cost?->at(
     RoundingBoundary::Display,
     RoundingMode::HalfUp,
 );

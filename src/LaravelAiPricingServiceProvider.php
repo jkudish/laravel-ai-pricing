@@ -7,6 +7,7 @@ namespace Jkudish\LaravelAiPricing;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Http\Client\Factory as HttpFactory;
+use Jkudish\LaravelAiPricing\Adapters\LaravelAiObservationAdapter;
 use Jkudish\LaravelAiPricing\Commands\SyncPricingCommand;
 use Jkudish\LaravelAiPricing\Contracts\CostResolver;
 use Jkudish\LaravelAiPricing\Sources\ConfiguredPricingSource;
@@ -62,6 +63,13 @@ final class LaravelAiPricingServiceProvider extends PackageServiceProvider
                 currency: $this->stringConfig('ai-pricing.currency'),
             );
         });
+
+        $this->app->singleton(LaravelAiObservationAdapter::class);
+
+        $this->app->singleton(ResponseCostResolver::class, fn (): ResponseCostResolver => new ResponseCostResolver(
+            resolver: $this->app->make(CostResolver::class),
+            laravelAi: $this->app->make(LaravelAiObservationAdapter::class),
+        ));
     }
 
     private function cache(CacheManager $manager): CacheRepository
