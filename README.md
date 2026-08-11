@@ -1,7 +1,7 @@
 <h1 align="center">Laravel AI Pricing</h1>
 
 <p align="center">
-  <strong>Trustworthy AI cost attribution for Laravel, with decimal-safe math, explicit uncertainty, and immutable pricing provenance.</strong>
+  <strong>Trustworthy AI cost attribution for Laravel.</strong>
 </p>
 
 <p align="center">
