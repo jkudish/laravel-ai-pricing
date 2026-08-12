@@ -14,9 +14,7 @@ Laravel AI Pricing tells you what an AI request cost, or what a future request i
 
 ## Installation
 
-> **Pre-release:** version 0.1 is feature-complete and being prepared for its first Packagist release.
-
-Once version 0.1 is published, install the package with Composer:
+Install the package with Composer:
 
 ```bash
 composer require jkudish/laravel-ai-pricing
