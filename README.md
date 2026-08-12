@@ -10,23 +10,23 @@
   <a href="LICENSE.md"><img src="https://img.shields.io/github/license/jkudish/laravel-ai-pricing" alt="License"></a>
 </p>
 
-Laravel AI Pricing turns a completed Laravel AI response into a cost result you can record, display, or use to enforce a budget. It uses provider-reported cost when Laravel AI exposes it and otherwise attributes cost from the response's billable usage and a versioned pricing source.
+Laravel AI Pricing tells you what an AI request cost, or what a future request is expected to cost. Use it after a Laravel AI response with `cost()`. Use `quote()` before a request when you need an estimate for a budget, model picker, or guardrail.
 
-## Install
+## Installation
 
 > **Pre-release:** version 0.1 is feature-complete and being prepared for its first Packagist release.
 
-Once version 0.1 is published:
+Once version 0.1 is published, install the package with Composer:
 
 ```bash
 composer require jkudish/laravel-ai-pricing
 ```
 
-The service provider is discovered automatically. Start without publishing configuration.
+Laravel discovers the service provider automatically. You do not need to publish the configuration to get started.
 
-## Use it with Laravel AI
+## Costing Laravel AI responses
 
-After your agent finishes, ask the package for the cost:
+Call `AiPricing::cost()` after an agent has completed its request:
 
 ```php
 use Jkudish\LaravelAiPricing\Facades\AiPricing;
@@ -35,53 +35,71 @@ $response = (new ReceiptOcrAgent)->prompt($prompt);
 
 $cost = AiPricing::cost($response);
 
-$cost->amount;               // Brick\Math\BigDecimal, or null when pricing is unavailable
-$cost->currency;             // "USD", or null
-$cost->source;               // configured, provider_reported, provider_native, ...
-$cost->completeness;         // complete, partial, or unavailable
+$cost->amount;       // Brick\Math\BigDecimal, or null
+$cost->currency;     // "USD", or null
+$cost->source;       // Where the amount came from
+$cost->completeness; // complete, partial, or unavailable
 ```
 
-`cost()` is for a completed response. It adapts Laravel AI's public response data, including the effective provider, model, and usage, then resolves the best compatible price. The returned `CostQuote` keeps the underlying `Money` value in `$cost->cost`, while `$cost->amount` and `$cost->currency` are convenient read-only aliases.
+`cost()` reads the response's public provider, model, and usage data. It then returns a `CostQuote`.
 
-For a streamed response, resolve the cost only after the stream has been consumed:
+If `$cost->amount` is `null`, the package did not have enough compatible pricing information. It does not return `0` for an unknown cost.
 
-```php
-$response = (new ReceiptOcrAgent)->stream($prompt);
+### What does “cost” mean?
 
-$response->then(function ($response): void {
-    $cost = AiPricing::cost($response);
+A cost result is either provider-reported or calculated:
 
-    AgentRun::recordCost($cost->toArray());
-});
+| Result | Meaning |
+| --- | --- |
+| `provider_reported` | The provider returned a monetary amount with the response. This is the closest thing to an invoice amount. |
+| `configured` | Your application supplied the model's rates in `config/ai-pricing.php`. |
+| `provider_native` or `portkey` | The package multiplied the response's billable usage by a published price from a remote catalog. |
+| `unavailable` | No compatible price was found. |
 
-foreach ($response as $event) {
-    // Send each stream event to the client.
-}
+Most providers return token counts, not dollars. For those responses, Laravel AI Pricing calculates an amount from the token usage and a price list. That calculated result is useful for application accounting, budgets, and reporting. It is not a replacement for a provider invoice.
+
+## Price catalogs
+
+A price catalog is a list of published rates for provider models. A rate says how much one unit costs, such as one million input tokens or one million output tokens.
+
+When a response has usage but no provider-reported amount, the package looks up the response's provider and model in a catalog, then calculates:
+
+```text
+cost = input usage × input rate + output usage × output rate
 ```
 
-Laravel AI does not currently offer a way for this package to add `$response->cost` directly to its response classes. The facade keeps the integration dependency-free, so Laravel AI remains an optional package dependency.
+The package checks prices in this order:
 
-## What works by default
+1. A provider-reported cost attached to the response.
+2. A price configured by your application.
+3. Provider-native pricing attached to the observation.
+4. OpenRouter's public model catalog for OpenRouter models.
+5. Portkey's public provider catalog as a fallback.
+6. An unavailable result.
 
-No configuration is required to call `AiPricing::cost()`.
+The first compatible price wins. The package does not convert currencies. A USD result only uses USD pricing.
+
+## Default behavior
+
+You can call `AiPricing::cost()` without configuration.
 
 - The default currency is USD.
 - Laravel AI text and embedding responses are adapted from their public usage and metadata.
-- If a matching public catalog price is available, the result is attributed from usage.
-- When Laravel AI supplies usage, missing or incomplete pricing returns `unavailable` or `partial`; it never invents a zero cost.
-- The package stores no prompts or model outputs, has no database, and performs no currency conversion.
+- OpenRouter text responses can use provider-reported `usage.cost` when Laravel AI exposes it.
+- Other built-in providers usually expose usage only. The package uses a compatible catalog price when one is available.
+- The package does not store prompts or model output, create database records, or make foreign-exchange conversions.
 
-For synchronous OpenRouter text responses on Laravel AI v0.10.3 or later, `usage.cost` in each public raw generation step is treated as provider-reported cost. It wins over every catalog. Other built-in providers currently expose billable usage rather than per-response money, so the package resolves their cost from usage and a configured or remote catalog.
+If you need an exact application rate, a region-specific Bedrock rate, or a known internal rate for a local model, configure the price yourself.
 
-## Configure application prices
+## Configuring prices
 
-Use application pricing when you need a specific model, region, inference profile, internal rate, or deterministic offline behavior. Publish the config:
+Publish the configuration file when your application needs its own price list:
 
 ```bash
 php artisan vendor:publish --tag=laravel-ai-pricing-config
 ```
 
-Rates use a normalized `provider:model` key. Use decimal strings for values and divisors that need precision:
+Prices use a `provider:model` key. Use decimal strings for rates and divisors:
 
 ```php
 // config/ai-pricing.php
@@ -101,30 +119,11 @@ Rates use a normalized `provider:model` key. Use decimal strings for values and 
 ],
 ```
 
-Configured prices take precedence over catalog pricing, but never replace a compatible provider-reported cost. This makes configured rates appropriate for Bedrock aliases and region-specific models, or for a known internal price of local workloads such as Ollama.
+Configured prices are used before remote catalogs. Provider-reported cost still takes precedence because it describes the completed request.
 
-## Use it in agents, jobs, and evaluations
+## Quoting a request before it runs
 
-Treat a result as request evidence, not a current price lookup. Persist it with the work your agent performed:
-
-```php
-$response = $agent->prompt($prompt);
-$cost = AiPricing::cost($response);
-
-AgentRun::create([
-    'provider' => $response->meta->provider,
-    'model' => $response->meta->model,
-    'pricing' => $cost->toArray(),
-]);
-```
-
-`toArray()` includes a `cost` object with amount and currency (or `null`), plus source, completeness, missing units, pricing snapshot, and provenance when available. A later catalog update therefore does not rewrite the evidence you recorded for an earlier request.
-
-This fits naturally in queued jobs, agent loops, evaluation suites, and budget reporting. For workloads with no Laravel AI response, use the lower-level resolver and an explicit `PricingObservation`.
-
-## Estimate before a request
-
-Use `quote()` when you want an estimate before a request is sent. It never claims to be what a provider charged:
+Use `quote()` when you know the provider, model, and expected usage before a request is sent:
 
 ```php
 use Jkudish\LaravelAiPricing\Facades\AiPricing;
@@ -137,32 +136,52 @@ $quote = AiPricing::quote(
 );
 
 if ($quote->amount !== null && $quote->amount->isLessThan('0.01')) {
-    // Safe to continue according to this estimate.
+    // Continue with this estimated request.
 }
 ```
 
-Use the completed response's `cost()` result for accounting. A quote is useful for guardrails, model selection, and expected-cost UI.
+A quote uses the same pricing sources and calculation rules as `cost()`, but it has no completed response and no provider-reported amount. Use a cost result for accounting after a request finishes. Use a quote to decide whether to send a request.
 
-## Pricing sources and accuracy
+## Streaming responses
 
-The first compatible source wins:
+For streamed responses, wait until the stream has been consumed before resolving its cost:
 
-1. Provider-reported cost supplied with the response.
-2. Application-configured pricing.
-3. Provider-native pricing supplied with the observation.
-4. OpenRouter's public model catalog for OpenRouter identities.
-5. Portkey's public provider catalogs as a fallback.
-6. An explicit unavailable result.
+```php
+$response = (new ReceiptOcrAgent)->stream($prompt);
 
-Catalog pricing in another currency is not silently converted or attributed. Decimal-safe arithmetic is used throughout; apply rounding explicitly at your display or billing boundary.
+$response->then(function ($response): void {
+    $cost = AiPricing::cost($response);
 
-Laravel AI's built-in OpenAI, Anthropic, Gemini, Groq, DeepSeek, Mistral, xAI, Cohere, and Bedrock providers currently provide usage quantities rather than response-level monetary cost. The package can match those provider and model identities to catalog prices. Embeddings expose input-token usage; image and transcription responses use their public `Usage` objects. Audio and reranking responses expose no billable quantity today, so supply an explicit workload unit and configured rate if you have one. The package does not infer a monetary cost for local Ollama execution.
+    // Persist $cost->toArray() with your application's job or agent-run record.
+});
 
-Failed or blocked requests may still be billable while provider usage is unavailable. Do not record those as zero-cost.
+foreach ($response as $event) {
+    // Send each stream event to the client.
+}
+```
 
-## Catalogs and offline operation
+## Recording costs
 
-Prewarm the remote catalogs you use:
+Store the result with the application record that represents the request, job, evaluation, or agent run:
+
+```php
+$response = $agent->prompt($prompt);
+$cost = AiPricing::cost($response);
+
+$pricing = [
+    'provider' => $response->meta->provider,
+    'model' => $response->meta->model,
+    'pricing' => $cost->toArray(),
+];
+```
+
+`toArray()` includes the cost object, source, completeness, missing units, pricing snapshot, and provenance when available. Saving that data preserves how you arrived at an earlier result, even if a catalog changes later.
+
+Failed or blocked requests can still be billable when a provider does not expose usage. Do not record those requests as zero-cost.
+
+## Catalog caching and offline mode
+
+Prewarm the remote catalogs your application uses:
 
 ```bash
 php artisan ai:pricing:sync
@@ -179,11 +198,11 @@ php artisan ai:pricing:sync
 ],
 ```
 
-Offline mode performs no network retrieval. It uses configured prices and previously cached last-known-good catalogs. Remote-derived results retain the sanitized source URL, retrieval time, normalized definition, and snapshot fingerprint.
+Offline mode makes no network requests. It uses configured prices and cached catalogs from earlier successful lookups.
 
 ## Precision and rounding
 
-Aggregate precise `Money` values before applying an explicit boundary:
+Amounts use `brick/math` decimals. Round only when you cross a display or billing boundary:
 
 ```php
 use Brick\Math\RoundingMode;
@@ -195,7 +214,7 @@ $display = $cost->cost?->at(
 );
 ```
 
-Mixed-currency arithmetic throws. USD is the default and version 0.1 performs no foreign exchange conversion.
+Mixed-currency arithmetic throws an exception. Version 0.1 does not perform foreign-exchange conversion.
 
 ## Compatibility
 
@@ -203,8 +222,6 @@ Mixed-currency arithmetic throws. USD is the default and version 0.1 performs no
 - Laravel 13 for the full development and test matrix.
 - Laravel 12 for clean consumer installation, package discovery, and command registration.
 - No runtime dependency on Pest or Laravel AI.
-
-The development suite uses Pest 5, PHPUnit 13, Laravel 13, and Testbench 11. Because Pest 5's Symfony Process constraint conflicts with Laravel 12's development stack, CI verifies Laravel 12 through a clean consumer installation without this repository's development dependencies.
 
 ## Stability
 
