@@ -10,8 +10,8 @@ Laravel AI Pricing keeps one narrow responsibility: produce trustworthy, provena
 - [x] Immutable pricing snapshots and provenance.
 - [x] Cached, offline, and last-known-good operation.
 - [x] Laravel service-provider integration and catalog sync command.
-- [ ] Publish `v0.1.0` to GitHub and Packagist.
-- [ ] Verify clean Laravel 12 and 13 consumer installations from the tagged package.
+- [x] Publish `v0.1.0` to GitHub and Packagist.
+- [x] Verify clean Laravel 12 and 13 consumer installations from the tagged package.
 
 Laravel AI's current public response objects do not expose provider-reported monetary cost. The package already accepts authoritative cost when an observation supplies it; native Laravel AI capture can be completed when the SDK surfaces that value without relying on provider-specific internals.
 
