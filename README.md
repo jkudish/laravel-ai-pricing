@@ -77,6 +77,28 @@ The package checks prices in this order:
 
 The first compatible price wins. The package does not convert currencies. A USD result only uses USD pricing.
 
+### Built-in API product SKUs
+
+Non-model APIs use a documented pricing SKU in the existing `model` field. The package includes a reviewed, versioned USD snapshot for products that do not publish a suitable machine-readable runtime catalog:
+
+| Provider | SKU | Usage units |
+| --- | --- | --- |
+| `brave` | `answers` | `queries`, `input_tokens`, `output_tokens` |
+| `exa` | `search` | `requests`, `additional_results`, `summary_pages` |
+| `kagi` | `fastgpt` | `uncached_queries` |
+| `you` | `answer` | `requests` |
+| `you` | `research-lite`, `research-standard`, `research-deep`, `research-exhaustive` | `requests` |
+| `perplexity` | `agent-low`, `agent-high` | `web_searches`, `fetch_url_requests`, `people_searches`, `finance_searches`, `sandbox_sessions`, `sandbox_searches` |
+| `searchapi` | `search` | `successful_search_request` |
+
+The Exa request rate includes up to ten results; pass only results above ten as `additional_results`. Pass `uncached_queries: 0` for a free cached Kagi response. You.com Frontier Research has negotiated usage and is intentionally unavailable.
+
+Perplexity Agent presets route across models and tools, so the preset SKUs contain only stable tool rates. A quote with tool usage and unpriced routed-model units is partial; model-only usage is unavailable. Prefer the completed response's provider-reported `usage.cost.total_cost` whenever present. The package does not treat representative preset runs as fixed prices or maximums.
+
+SearchAPI charges successful searches at an account-plan-specific rate. Its built-in Developer-plan retail rate is informational, not a universal actual cost or enforcement ceiling. Configure `searchapi:search` with your account rate before enforcing a budget. A Google AI Overview workflow that makes two successful SearchAPI requests must pass `successful_search_request: 2`.
+
+Snapshot entries include source and retrieval metadata in `resources/pricing/provider-skus.php`. Future rate changes should follow `.agents/skills/fetching-provider-pricing`; runtime code never scrapes provider pricing pages.
+
 ## Default behavior
 
 You can call `AiPricing::cost()` without configuration.

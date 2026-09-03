@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Reviewed package pricing for Brave Answers, Exa Search, Kagi FastGPT, You.com Answer and Research tiers, Perplexity Agent tool usage, and informational SearchAPI retail estimates.
+- Source-local Portkey provider aliases for Laravel Gemini, xAI, and exact-match Perplexity model identities.
+- Project guidance for safely researching, snapshotting, and verifying provider pricing.
+
 ## [0.1.0] - 2026-08-11
 
 ### Added

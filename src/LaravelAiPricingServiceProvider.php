@@ -12,6 +12,7 @@ use Jkudish\LaravelAiPricing\Commands\SyncPricingCommand;
 use Jkudish\LaravelAiPricing\Contracts\CostResolver;
 use Jkudish\LaravelAiPricing\Sources\ConfiguredPricingSource;
 use Jkudish\LaravelAiPricing\Sources\OpenRouterPricingSource;
+use Jkudish\LaravelAiPricing\Sources\PackagePricingSource;
 use Jkudish\LaravelAiPricing\Sources\PortkeyPricingSource;
 use LogicException;
 use Spatie\LaravelPackageTools\Package;
@@ -55,12 +56,20 @@ final class LaravelAiPricingServiceProvider extends PackageServiceProvider
             currency: $this->stringConfig('ai-pricing.currency'),
         ));
 
+        $this->app->singleton(PackagePricingSource::class, function (): PackagePricingSource {
+            /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
+            $snapshot = require __DIR__.'/../resources/pricing/provider-skus.php';
+
+            return new PackagePricingSource($snapshot);
+        });
+
         $this->app->singleton(CostResolver::class, function (): PricingResolver {
             return new PricingResolver(
                 configured: $this->configured(),
                 native: $this->openRouter(),
                 fallback: $this->portkey(),
                 currency: $this->stringConfig('ai-pricing.currency'),
+                snapshot: $this->packagePricing(),
             );
         });
 
@@ -102,6 +111,11 @@ final class LaravelAiPricingServiceProvider extends PackageServiceProvider
     private function portkey(): PortkeyPricingSource
     {
         return $this->app->make(PortkeyPricingSource::class);
+    }
+
+    private function packagePricing(): PackagePricingSource
+    {
+        return $this->app->make(PackagePricingSource::class);
     }
 
     private function stringConfig(string $key): string
