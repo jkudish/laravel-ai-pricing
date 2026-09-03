@@ -110,3 +110,26 @@ it('quotes package SKUs while preserving configured override precedence', functi
         ->and((string) $configuredQuote->cost?->amount)->toBe('0.018')
         ->and($configuredQuote->source->value)->toBe('configured');
 });
+
+it('requires configured SearchAPI account pricing before returning a complete quote', function (): void {
+    $identity = new ModelIdentity('searchapi', 'search');
+    $usage = new Usage(['successful_search_request' => 2]);
+
+    $unconfigured = app(CostResolver::class)->resolve(new PricingObservation($identity, $usage));
+
+    config()->set('ai-pricing.prices', [
+        'searchapi:search' => [
+            'successful_search_request' => ['amount' => '4', 'per' => '1000'],
+        ],
+    ]);
+    app()->forgetInstance(ConfiguredPricingSource::class);
+    app()->forgetInstance(CostResolver::class);
+
+    $configured = app(CostResolver::class)->resolve(new PricingObservation($identity, $usage));
+
+    expect($unconfigured->cost)->toBeNull()
+        ->and($unconfigured->completeness->value)->toBe('unavailable')
+        ->and((string) $configured->cost?->amount)->toBe('0.008')
+        ->and($configured->completeness->value)->toBe('complete')
+        ->and($configured->source->value)->toBe('configured');
+});

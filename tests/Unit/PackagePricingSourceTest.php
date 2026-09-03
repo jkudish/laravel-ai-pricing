@@ -39,7 +39,6 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'You Research Exhaustive' => ['you', 'research-exhaustive', 'requests', '450', '1000'],
     'Perplexity Agent Low' => ['perplexity', 'agent-low', 'web_searches', '0.0025', '1'],
     'Perplexity Agent High' => ['perplexity', 'agent-high', 'sandbox_sessions', '0.03', '1'],
-    'SearchAPI Search' => ['searchapi', 'search', 'successful_search_request', '4', '1000'],
 ]);
 
 it('calculates compound rates exactly and reports unknown required units', function (): void {
@@ -74,14 +73,6 @@ it('keeps frontier research and unknown SKUs unavailable', function (string $pro
 })->with([
     ['you', 'research-frontier'],
     ['perplexity', 'agent-auto'],
+    ['searchapi', 'search'],
     ['searchapi', 'google'],
 ]);
-
-it('documents SearchAPI retail pricing as informational and account specific', function (): void {
-    /** @var array{prices: array<string, array{notes?: string}>} $snapshot */
-    $snapshot = require __DIR__.'/../../resources/pricing/provider-skus.php';
-
-    expect($snapshot['prices']['searchapi:search']['notes'] ?? '')
-        ->toContain('Informational Developer-plan retail rate')
-        ->toContain('Configure the account rate for enforcement');
-});

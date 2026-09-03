@@ -22,6 +22,6 @@ Update pricing without turning uncertain or account-specific terms into false to
 
 - A missing required rate or quantity is partial or unavailable, never zero.
 - Provider-reported response totals outrank estimates.
-- Account-plan rates must be configured for enforcement; label any package retail example informational.
+- Account-plan rates must be configured for enforcement. Keep retail examples in documentation, never in the executable package snapshot.
 - Cached/free conditional billing needs a billable usage unit, not a universal per-call charge.
 - Reject runtime HTML scraping, credentialed fixture refreshes, floats, and copied third-party summaries.

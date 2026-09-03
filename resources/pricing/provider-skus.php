@@ -8,7 +8,7 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 1,
+    'version' => 2,
     'retrieved_at' => '2026-09-03T00:00:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
@@ -85,13 +85,6 @@ return [
                 'finance_searches' => ['amount' => '0.005', 'per' => '1'],
                 'sandbox_sessions' => ['amount' => '0.03', 'per' => '1'],
                 'sandbox_searches' => ['amount' => '0.0025', 'per' => '1'],
-            ],
-        ],
-        'searchapi:search' => [
-            'source' => 'https://www.searchapi.io/pricing',
-            'notes' => 'Informational Developer-plan retail rate only. Configure the account rate for enforcement.',
-            'rates' => [
-                'successful_search_request' => ['amount' => '4', 'per' => '1000'],
             ],
         ],
     ],
