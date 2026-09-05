@@ -21,6 +21,7 @@ final readonly class PricingResolver implements CostResolver
         private PricingCatalog $fallback,
         private string $currency = 'USD',
         private CostCalculator $calculator = new CostCalculator,
+        private ?PricingCatalog $snapshot = null,
     ) {}
 
     #[Override]
@@ -42,6 +43,7 @@ final readonly class PricingResolver implements CostResolver
         $pricing = $this->configured->find($observation->identity)
             ?? $observation->providerNativePricing
             ?? $this->native->find($observation->identity)
+            ?? $this->snapshot?->find($observation->identity)
             ?? $this->fallback->find($observation->identity);
 
         if ($pricing === null) {

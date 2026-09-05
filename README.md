@@ -72,10 +72,46 @@ The package checks prices in this order:
 2. A price configured by your application.
 3. Provider-native pricing attached to the observation.
 4. OpenRouter's public model catalog for OpenRouter models.
-5. Portkey's public provider catalog as a fallback.
-6. An unavailable result.
+5. The package's reviewed pricing snapshot.
+6. Portkey's public provider catalog as a fallback.
+7. An unavailable result.
 
 The first compatible price wins. The package does not convert currencies. A USD result only uses USD pricing.
+
+### Built-in API product SKUs
+
+Non-model APIs use a documented pricing SKU in the existing `model` field. The package includes a reviewed, versioned USD snapshot for products that do not publish a suitable machine-readable runtime catalog:
+
+| Provider | SKU | Usage units |
+| --- | --- | --- |
+| `brave` | `answers` | `queries`, `input_tokens`, `output_tokens` |
+| `exa` | `search` | `requests`, `additional_results`, `summary_pages` |
+| `kagi` | `fastgpt` | `uncached_queries` |
+| `you` | `answer` | `requests` |
+| `you` | `research-lite`, `research-standard`, `research-deep`, `research-exhaustive` | `requests` |
+| `perplexity` | `agent-low`, `agent-high` | `web_searches`, `fetch_url_requests`, `people_searches`, `finance_searches`, `sandbox_sessions`, `sandbox_searches` |
+
+The Exa request rate includes up to ten results; pass only results above ten as `additional_results`. Pass `uncached_queries: 0` for a free cached Kagi response. You.com Frontier Research has negotiated usage and is intentionally unavailable.
+
+Perplexity Agent presets route across models and tools, so the preset SKUs contain only stable tool rates. A quote with tool usage and unpriced routed-model units is partial; model-only usage is unavailable. Prefer the completed response's provider-reported `usage.cost.total_cost` whenever present. The package does not treat representative preset runs as fixed prices or maximums.
+
+SearchAPI charges successful searches at an account-plan-specific rate, so `searchapi:search` is unavailable by default. Configure the `successful_search_request` unit with your account rate before enforcing a budget. For example, if your account charges USD 4 per 1,000 successful requests:
+
+```php
+'prices' => [
+    'searchapi:search' => [
+        'successful_search_request' => [
+            'amount' => '4', // Replace with your account plan's rate.
+            'per' => '1000',
+            'currency' => 'USD',
+        ],
+    ],
+],
+```
+
+After configuration, the resolver returns a Complete configured quote. A Google AI Overview workflow that makes two successful SearchAPI requests must pass `successful_search_request: 2`.
+
+Snapshot entries include source and retrieval metadata in `resources/pricing/provider-skus.php`. Future rate changes should follow `.agents/skills/fetching-provider-pricing`; runtime code never scrapes provider pricing pages.
 
 ## Default behavior
 

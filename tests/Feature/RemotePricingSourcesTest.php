@@ -170,6 +170,49 @@ it('matches Bedrock usage to its Portkey model catalog', function (): void {
     Http::assertSent(fn ($request): bool => $request->url() === 'https://portkey.test/pricing/bedrock.json');
 });
 
+it('adapts Laravel provider names only inside Portkey lookup', function (string $observed, string $catalogProvider): void {
+    Http::fake([
+        "https://portkey.test/pricing/{$catalogProvider}.json" => Http::response([
+            'matching-model' => [
+                'pricing_config' => [
+                    'pay_as_you_go' => ['request_token' => ['price' => '0.1']],
+                    'currency' => 'USD',
+                ],
+            ],
+        ]),
+    ]);
+
+    $identity = new ModelIdentity($observed, 'matching-model');
+    $definition = portkeySource()->find($identity);
+
+    expect($definition?->identity)->toBe($identity)
+        ->and($definition?->identity->provider)->toBe($observed)
+        ->and($definition?->sourceReference)->toBe("https://portkey.test/pricing/{$catalogProvider}.json");
+    Http::assertSent(fn ($request): bool => $request->url() === "https://portkey.test/pricing/{$catalogProvider}.json");
+})->with([
+    'Gemini' => ['gemini', 'google'],
+    'xAI' => ['xai', 'x-ai'],
+    'Perplexity exact model' => ['perplexity', 'perplexity-ai'],
+]);
+
+it('canonicalizes Portkey aliases before cache lookup', function (): void {
+    Http::fake([
+        'https://portkey.test/pricing/google.json' => Http::response([
+            'gemini-test' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => '0.1']]]],
+        ]),
+    ]);
+
+    portkeySource()->find(new ModelIdentity('gemini', 'gemini-test'));
+    Http::preventStrayRequests();
+
+    $definition = portkeySource(offline: true)->find(new ModelIdentity('google', 'gemini-test'));
+
+    expect($definition)->not->toBeNull()
+        ->and($definition?->identity->provider)->toBe('google')
+        ->and($definition?->sourceReference)->toBe('https://portkey.test/pricing/google.json');
+    Http::assertSentCount(1);
+});
+
 it('syncs only explicitly configured Portkey providers', function (): void {
     Http::fake([
         'https://portkey.test/pricing/openai.json' => Http::response(['gpt-test' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => '0.1']]]]]),

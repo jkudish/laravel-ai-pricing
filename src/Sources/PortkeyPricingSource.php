@@ -234,7 +234,12 @@ final class PortkeyPricingSource implements PricingCatalog
 
     private function normalizedProvider(string $provider): string
     {
-        return strtolower(trim($provider));
+        return match (strtolower(trim($provider))) {
+            'gemini' => 'google',
+            'xai' => 'x-ai',
+            'perplexity' => 'perplexity-ai',
+            default => strtolower(trim($provider)),
+        };
     }
 
     /** @param array<mixed> $value

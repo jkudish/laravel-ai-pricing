@@ -67,6 +67,23 @@ it('resolves configured native observation remote native then fallback in order'
     ];
 });
 
+it('uses a remote native catalog before a package snapshot and the snapshot before fallback', function (bool $hasNative, string $expectedAmount): void {
+    $identity = new ModelIdentity('provider', 'sku');
+    $resolver = new PricingResolver(
+        configured: catalog(null),
+        native: catalog($hasNative ? price($identity, PricingSource::ProviderNative, '3') : null),
+        fallback: catalog(price($identity, PricingSource::Portkey, '1')),
+        snapshot: catalog(price($identity, PricingSource::ProviderNative, '2')),
+    );
+
+    $quote = $resolver->resolve(new PricingObservation($identity, Usage::tokens(1, 0)));
+
+    expect((string) $quote->cost?->amount)->toBe($expectedAmount);
+})->with([
+    'remote native first' => [true, '3'],
+    'snapshot before fallback' => [false, '2'],
+]);
+
 it('returns unavailable without throwing when prices are missing', function (): void {
     $identity = new ModelIdentity('provider', 'unknown');
     $quote = (new PricingResolver(catalog(null), catalog(null), catalog(null)))
