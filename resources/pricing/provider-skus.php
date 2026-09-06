@@ -8,7 +8,7 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 2,
+    'version' => 3,
     'retrieved_at' => '2026-09-03T00:00:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
@@ -19,6 +19,48 @@ return [
                 'queries' => ['amount' => '4', 'per' => '1000'],
                 'input_tokens' => ['amount' => '5', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '5', 'per' => '1000000'],
+            ],
+        ],
+        'dataforseo:chatgpt-llm-scraper-standard' => [
+            'source' => 'https://dataforseo.com/pricing/ai-optimization/llm-scraper',
+            'notes' => 'Checked 2026-09-06. Base normal-priority Standard price per result page. One requests unit is one billable task/result-page submission; retrieval GETs are free. Excludes high-priority, bulk, HTML, rectangle, and surcharged options. Estimate only; actual provider cost wins and failures may be charged.',
+            'rates' => [
+                'requests' => ['amount' => '0.0012', 'per' => '1'],
+            ],
+        ],
+        'dataforseo:chatgpt-llm-scraper-live' => [
+            'source' => 'https://dataforseo.com/pricing/ai-optimization/llm-scraper',
+            'notes' => 'Checked 2026-09-06. Base Live price per result page. One requests unit is one billable task/result-page submission. Excludes high-priority, bulk, HTML, rectangle, and surcharged options. Estimate only; actual provider cost wins and failures may be charged.',
+            'rates' => [
+                'requests' => ['amount' => '0.004', 'per' => '1'],
+            ],
+        ],
+        'dataforseo:gemini-llm-scraper-standard' => [
+            'source' => 'https://dataforseo.com/pricing/ai-optimization/llm-scraper',
+            'notes' => 'Checked 2026-09-06. Base normal-priority Standard price per result page. One requests unit is one billable task/result-page submission; retrieval GETs are free. Excludes high-priority, bulk, HTML, rectangle, and surcharged options. Estimate only; actual provider cost wins and failures may be charged.',
+            'rates' => [
+                'requests' => ['amount' => '0.0012', 'per' => '1'],
+            ],
+        ],
+        'dataforseo:gemini-llm-scraper-live' => [
+            'source' => 'https://dataforseo.com/pricing/ai-optimization/llm-scraper',
+            'notes' => 'Checked 2026-09-06. Base Live price per result page. One requests unit is one billable task/result-page submission. Excludes high-priority, bulk, HTML, rectangle, and surcharged options. Estimate only; actual provider cost wins and failures may be charged.',
+            'rates' => [
+                'requests' => ['amount' => '0.004', 'per' => '1'],
+            ],
+        ],
+        'dataforseo:google-ai-mode-standard' => [
+            'source' => 'https://dataforseo.com/pricing/serp/google-ai-mode-serp-api',
+            'notes' => 'Checked 2026-09-06. Base normal-priority Standard price per SERP page. One requests unit is one billable task/result-page submission; retrieval GETs are free. Excludes high-priority, bulk, HTML, rectangle, and surcharged options. Estimate only; actual provider cost wins and failures may be charged.',
+            'rates' => [
+                'requests' => ['amount' => '0.0012', 'per' => '1'],
+            ],
+        ],
+        'dataforseo:google-ai-mode-live' => [
+            'source' => 'https://dataforseo.com/pricing/serp/google-ai-mode-serp-api',
+            'notes' => 'Checked 2026-09-06. Base Live price per SERP page. One requests unit is one billable task/result-page submission. Excludes high-priority, bulk, HTML, rectangle, and surcharged options. Estimate only; actual provider cost wins and failures may be charged.',
+            'rates' => [
+                'requests' => ['amount' => '0.004', 'per' => '1'],
             ],
         ],
         'exa:search' => [

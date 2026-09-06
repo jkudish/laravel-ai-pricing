@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Reviewed base pricing for six DataForSEO LLM Scraper and Google AI Mode Standard/Live product SKUs.
 - Reviewed package pricing for Brave Answers, Exa Search, Kagi FastGPT, You.com Answer and Research tiers, and Perplexity Agent tool usage, plus a configured-only SearchAPI pricing identity.
 - Source-local Portkey provider aliases for Laravel Gemini, xAI, and exact-match Perplexity model identities.
 - Project guidance for safely researching, snapshotting, and verifying provider pricing.
