@@ -111,6 +111,33 @@ it('quotes package SKUs while preserving configured override precedence', functi
         ->and($configuredQuote->source->value)->toBe('configured');
 });
 
+it('preserves configured override precedence for every DataForSEO package SKU', function (string $sku, string $packageAmount): void {
+    $identity = new ModelIdentity('dataforseo', $sku);
+    $usage = new Usage(['requests' => 2]);
+
+    $packageQuote = app(CostResolver::class)->resolve(new PricingObservation($identity, $usage));
+
+    config()->set('ai-pricing.prices', [
+        "dataforseo:{$sku}" => ['requests' => ['amount' => '9', 'per' => '1']],
+    ]);
+    app()->forgetInstance(ConfiguredPricingSource::class);
+    app()->forgetInstance(CostResolver::class);
+
+    $configuredQuote = app(CostResolver::class)->resolve(new PricingObservation($identity, $usage));
+
+    expect((string) $packageQuote->cost?->amount)->toBe($packageAmount)
+        ->and($packageQuote->source->value)->toBe('provider_native')
+        ->and((string) $configuredQuote->cost?->amount)->toBe('18')
+        ->and($configuredQuote->source->value)->toBe('configured');
+})->with([
+    'ChatGPT LLM Scraper Standard' => ['chatgpt-llm-scraper-standard', '0.0024'],
+    'ChatGPT LLM Scraper Live' => ['chatgpt-llm-scraper-live', '0.008'],
+    'Gemini LLM Scraper Standard' => ['gemini-llm-scraper-standard', '0.0024'],
+    'Gemini LLM Scraper Live' => ['gemini-llm-scraper-live', '0.008'],
+    'Google AI Mode Standard' => ['google-ai-mode-standard', '0.0024'],
+    'Google AI Mode Live' => ['google-ai-mode-live', '0.008'],
+]);
+
 it('requires configured SearchAPI account pricing before returning a complete quote', function (): void {
     $identity = new ModelIdentity('searchapi', 'search');
     $usage = new Usage(['successful_search_request' => 2]);

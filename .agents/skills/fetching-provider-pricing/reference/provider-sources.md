@@ -5,6 +5,8 @@ Use these primary-source starting points, then verify that the page still descri
 | Provider/product | Primary source | Review focus |
 | --- | --- | --- |
 | Brave Answers | <https://api-dashboard.search.brave.com/documentation/services/answers> | Query/search and token components; response component and total costs |
+| DataForSEO LLM Scraper | <https://dataforseo.com/pricing/ai-optimization/llm-scraper> | Normal Standard and Live base result-page prices; free Standard retrieval GETs; priority and option surcharges |
+| DataForSEO Google AI Mode | <https://dataforseo.com/pricing/serp/google-ai-mode-serp-api> | Normal Standard and Live base SERP-page prices; free Standard retrieval GETs; priority and option surcharges |
 | Exa Search | <https://exa.ai/docs/reference/pricing.md> and <https://exa.ai/docs/reference/search> | Included results, additions, summaries, and `costDollars` |
 | Kagi FastGPT | <https://help.kagi.com/kagi/api/fastgpt.html> | Web-enabled query price and free cached responses |
 | You.com APIs | <https://you.com/pricing> and <https://you.com/resources/research-api-by-you-com#pricing> | Fixed Answer calls and exact named Research tiers |

@@ -85,6 +85,9 @@ Non-model APIs use a documented pricing SKU in the existing `model` field. The p
 | Provider | SKU | Usage units |
 | --- | --- | --- |
 | `brave` | `answers` | `queries`, `input_tokens`, `output_tokens` |
+| `dataforseo` | `chatgpt-llm-scraper-standard`, `chatgpt-llm-scraper-live` | `requests` |
+| `dataforseo` | `gemini-llm-scraper-standard`, `gemini-llm-scraper-live` | `requests` |
+| `dataforseo` | `google-ai-mode-standard`, `google-ai-mode-live` | `requests` |
 | `exa` | `search` | `requests`, `additional_results`, `summary_pages` |
 | `kagi` | `fastgpt` | `uncached_queries` |
 | `you` | `answer` | `requests` |
@@ -92,6 +95,10 @@ Non-model APIs use a documented pricing SKU in the existing `model` field. The p
 | `perplexity` | `agent-low`, `agent-high` | `web_searches`, `fetch_url_requests`, `people_searches`, `finance_searches`, `sandbox_sessions`, `sandbox_searches` |
 
 The Exa request rate includes up to ten results; pass only results above ten as `additional_results`. Pass `uncached_queries: 0` for a free cached Kagi response. You.com Frontier Research has negotiated usage and is intentionally unavailable.
+
+The DataForSEO SKU names identify products and modes; they are not assertions about the underlying model. For these SKUs, `requests: 1` means one restricted billable task/result-page submission. A normal-priority Standard submission is billed once and its later retrieval GETs are free, so do not count those GETs as additional requests. The built-in prices cover only the base normal Standard and Live operations reviewed from DataForSEO's official pages on 2026-09-06. They exclude high-priority, bulk, HTML, rectangle, and other surcharged options. LLM Scraper pricing does not apply to LLM Responses.
+
+These prices are estimates, not invoices. Provider-reported actual cost still wins, failures may be charged, and missing usage produces an unavailable result rather than a zero quote. This package supplies pricing identities only; it does not implement DataForSEO task submission, polling, or retrieval.
 
 Perplexity Agent presets route across models and tools, so the preset SKUs contain only stable tool rates. A quote with tool usage and unpriced routed-model units is partial; model-only usage is unavailable. Prefer the completed response's provider-reported `usage.cost.total_cost` whenever present. The package does not treat representative preset runs as fixed prices or maximums.
 
