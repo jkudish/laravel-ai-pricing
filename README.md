@@ -133,7 +133,7 @@ These prices are estimates, not invoices. Provider-reported actual cost still wi
 
 Perplexity Agent presets route across models and tools, so the preset SKUs contain only stable tool rates. A quote with tool usage and unpriced routed-model units is partial; model-only usage is unavailable. Prefer the completed response's provider-reported `usage.cost.total_cost` whenever present. The package does not treat representative preset runs as fixed prices or maximums.
 
-Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 pricing changes above the context threshold; the current X Search billing model is also scheduled to change on September 21, 2026. Because the reviewed snapshot precedes the Portkey fallback, this partial xAI entry deliberately prevents incompatible flat fallback token rates from being applied to `grok-4.6`; token-only usage is unavailable, and search plus token usage is partial.
+Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 pricing changes above the context threshold; the current X Search billing model is also scheduled to change on September 21, 2026, so re-review this entry before any release on or after that date. Because the reviewed snapshot precedes the Portkey fallback, this partial xAI entry deliberately prevents incompatible flat fallback token rates from being applied to `grok-4.6`; token-only usage is unavailable, and search plus token usage is partial.
 
 SearchAPI charges successful searches at an account-plan-specific rate, so `searchapi:search` is unavailable by default. Configure the `successful_search_request` unit with your account rate before enforcing a budget. For example, if your account charges USD 4 per 1,000 successful requests:
 
@@ -193,7 +193,7 @@ Prices use a `provider:model` key. Use decimal strings for rates and divisors:
 ],
 ```
 
-Configured prices are used before remote catalogs. Provider-reported cost still takes precedence because it describes the completed request.
+Configured prices are used before remote catalogs. A configured identity replaces the snapshot definition; its units are not merged with built-in units. For example, an `xai:grok-4.6` override that still prices search tools must include `searches`. Provider-reported cost still takes precedence because it describes the completed request.
 
 ## Quoting a request before it runs
 

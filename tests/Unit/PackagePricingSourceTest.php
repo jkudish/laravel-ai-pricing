@@ -135,6 +135,14 @@ it('keeps the six DataForSEO identities distinct and records their actual review
     }
 });
 
+it('retains a per-SKU source review date when assembling a newer snapshot', function (): void {
+    $snapshot = packagePricingSnapshot();
+
+    foreach ($snapshot['prices'] as $price) {
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10)\./');
+    }
+});
+
 it('does not turn missing or unknown DataForSEO usage into a complete or zero quote', function (string $sku): void {
     $definition = packagePricingSource()->find(new ModelIdentity('dataforseo', $sku));
     $missing = (new CostCalculator)->calculate(new Usage([]), $definition);

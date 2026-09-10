@@ -15,6 +15,7 @@ return [
     'prices' => [
         'brave:answers' => [
             'source' => 'https://api-dashboard.search.brave.com/documentation/services/answers',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'queries' => ['amount' => '4', 'per' => '1000'],
                 'input_tokens' => ['amount' => '5', 'per' => '1000000'],
@@ -72,6 +73,7 @@ return [
         ],
         'exa:search' => [
             'source' => 'https://exa.ai/docs/reference/pricing.md',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'requests' => ['amount' => '7', 'per' => '1000'],
                 'additional_results' => ['amount' => '1', 'per' => '1000'],
@@ -88,42 +90,49 @@ return [
         ],
         'kagi:fastgpt' => [
             'source' => 'https://help.kagi.com/kagi/api/fastgpt.html',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'uncached_queries' => ['amount' => '15', 'per' => '1000'],
             ],
         ],
         'you:answer' => [
             'source' => 'https://you.com/pricing',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'requests' => ['amount' => '5', 'per' => '1000'],
             ],
         ],
         'you:research-lite' => [
             'source' => 'https://you.com/resources/research-api-by-you-com#pricing',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'requests' => ['amount' => '12', 'per' => '1000'],
             ],
         ],
         'you:research-standard' => [
             'source' => 'https://you.com/resources/research-api-by-you-com#pricing',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'requests' => ['amount' => '50', 'per' => '1000'],
             ],
         ],
         'you:research-deep' => [
             'source' => 'https://you.com/resources/research-api-by-you-com#pricing',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'requests' => ['amount' => '100', 'per' => '1000'],
             ],
         ],
         'you:research-exhaustive' => [
             'source' => 'https://you.com/resources/research-api-by-you-com#pricing',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'requests' => ['amount' => '450', 'per' => '1000'],
             ],
         ],
         'perplexity:agent-low' => [
             'source' => 'https://docs.perplexity.ai/docs/getting-started/pricing',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'web_searches' => ['amount' => '0.0025', 'per' => '1'],
                 'fetch_url_requests' => ['amount' => '0.0005', 'per' => '1'],
@@ -147,6 +156,7 @@ return [
         ],
         'perplexity:agent-high' => [
             'source' => 'https://docs.perplexity.ai/docs/getting-started/pricing',
+            'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'web_searches' => ['amount' => '0.0025', 'per' => '1'],
                 'fetch_url_requests' => ['amount' => '0.0005', 'per' => '1'],
