@@ -82,6 +82,8 @@ The first compatible price wins. The package does not convert currencies. A USD 
 
 Non-model APIs use a documented pricing SKU in the existing `model` field. The package includes a reviewed, versioned USD snapshot for products that do not publish a suitable machine-readable runtime catalog:
 
+The snapshot-level `retrieved_at` records when the package snapshot was assembled. Individual `notes` retain an earlier per-SKU source review date when an unchanged entry was carried forward.
+
 | Provider | SKU | Usage units |
 | --- | --- | --- |
 | `brave` | `answers` | `queries`, `input_tokens`, `output_tokens` |
@@ -131,7 +133,7 @@ These prices are estimates, not invoices. Provider-reported actual cost still wi
 
 Perplexity Agent presets route across models and tools, so the preset SKUs contain only stable tool rates. A quote with tool usage and unpriced routed-model units is partial; model-only usage is unavailable. Prefer the completed response's provider-reported `usage.cost.total_cost` whenever present. The package does not treat representative preset runs as fixed prices or maximums.
 
-Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 pricing changes above the context threshold; the current X Search billing model is also scheduled to change on September 21, 2026.
+Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 pricing changes above the context threshold; the current X Search billing model is also scheduled to change on September 21, 2026. Because the reviewed snapshot precedes the Portkey fallback, this partial xAI entry deliberately prevents incompatible flat fallback token rates from being applied to `grok-4.6`; token-only usage is unavailable, and search plus token usage is partial.
 
 SearchAPI charges successful searches at an account-plan-specific rate, so `searchapi:search` is unavailable by default. Configure the `successful_search_request` unit with your account rate before enforcing a budget. For example, if your account charges USD 4 per 1,000 successful requests:
 

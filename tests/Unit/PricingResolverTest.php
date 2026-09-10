@@ -6,6 +6,7 @@ use Jkudish\LaravelAiPricing\Contracts\PricingCatalog;
 use Jkudish\LaravelAiPricing\Enums\CostCompleteness;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
 use Jkudish\LaravelAiPricing\PricingResolver;
+use Jkudish\LaravelAiPricing\Sources\PackagePricingSource;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\Money;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
@@ -83,6 +84,31 @@ it('uses a remote native catalog before a package snapshot and the snapshot befo
     'remote native first' => [true, '3'],
     'snapshot before fallback' => [false, '2'],
 ]);
+
+it('uses the conservative xAI snapshot instead of incompatible fallback token rates', function (): void {
+    $identity = new ModelIdentity('xai', 'grok-4.6');
+    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
+    $snapshot = require __DIR__.'/../../resources/pricing/provider-skus.php';
+    $resolver = new PricingResolver(
+        configured: catalog(null),
+        native: catalog(null),
+        fallback: catalog(price($identity, PricingSource::Portkey, '0.001')),
+        snapshot: new PackagePricingSource($snapshot),
+    );
+
+    $tokenOnly = $resolver->resolve(new PricingObservation($identity, Usage::tokens(1, 0)));
+    $withSearch = $resolver->resolve(new PricingObservation(
+        $identity,
+        new Usage(['input_tokens' => 1, 'searches' => 2]),
+    ));
+
+    expect($tokenOnly->cost)->toBeNull()
+        ->and($tokenOnly->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and((string) $withSearch->cost?->amount)->toBe('0.01')
+        ->and($withSearch->completeness)->toBe(CostCompleteness::Partial)
+        ->and($withSearch->missingUnits)->toBe(['input_tokens'])
+        ->and($withSearch->source)->toBe(PricingSource::ProviderNative);
+});
 
 it('returns unavailable without throwing when prices are missing', function (): void {
     $identity = new ModelIdentity('provider', 'unknown');
