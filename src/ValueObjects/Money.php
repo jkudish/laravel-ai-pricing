@@ -42,6 +42,10 @@ final readonly class Money
 
     public function rounded(int $scale = 6, RoundingMode $mode = RoundingMode::HalfUp): self
     {
+        if ($scale < 0) {
+            throw new InvalidArgumentException('Money scale cannot be negative.');
+        }
+
         return new self($this->amount->toScale($scale, $mode), $this->currency);
     }
 

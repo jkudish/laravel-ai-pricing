@@ -72,6 +72,7 @@ it('rejects mixed currencies when constructing a price definition', function ():
 it('rejects invalid money usage and rate values', function (): void {
     expect(fn () => new Money('-1'))->toThrow(InvalidArgumentException::class)
         ->and(fn () => new Money('1', 'US'))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => (new Money('1'))->rounded(-1))->toThrow(InvalidArgumentException::class, 'Money scale cannot be negative.')
         ->and(fn () => new Usage(['tokens' => -1]))->toThrow(InvalidArgumentException::class)
         ->and(fn () => new Rate('tokens', 1, 0))->toThrow(InvalidArgumentException::class);
 });

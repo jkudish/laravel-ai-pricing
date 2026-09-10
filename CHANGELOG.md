@@ -7,12 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-09
+
 ### Added
 
 - Reviewed base pricing for six DataForSEO LLM Scraper and Google AI Mode Standard/Live product SKUs.
 - Reviewed package pricing for Brave Answers, Exa Search, Kagi FastGPT, You.com Answer and Research tiers, and Perplexity Agent tool usage, plus a configured-only SearchAPI pricing identity.
 - Source-local Portkey provider aliases for Laravel Gemini, xAI, and exact-match Perplexity model identities.
 - Project guidance for safely researching, snapshotting, and verifying provider pricing.
+
+### Changed
+
+- Accept `brick/math` 0.14 and higher.
 
 ## [0.1.0] - 2026-08-11
 
@@ -29,5 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.0...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.1...main
+[0.1.1]: https://github.com/jkudish/laravel-ai-pricing/releases/tag/v0.1.1
 [0.1.0]: https://github.com/jkudish/laravel-ai-pricing/releases/tag/v0.1.0
