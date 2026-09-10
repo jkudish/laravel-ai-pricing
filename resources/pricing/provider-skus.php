@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 3,
-    'retrieved_at' => '2026-09-03T00:00:00+00:00',
+    'version' => 4,
+    'retrieved_at' => '2026-09-10T00:00:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'prices' => [
@@ -19,6 +19,13 @@ return [
                 'queries' => ['amount' => '4', 'per' => '1000'],
                 'input_tokens' => ['amount' => '5', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '5', 'per' => '1000000'],
+            ],
+        ],
+        'brave:search' => [
+            'source' => 'https://api-dashboard.search.brave.com/documentation/pricing',
+            'notes' => 'Checked 2026-09-10. Search API price per request.',
+            'rates' => [
+                'requests' => ['amount' => '5', 'per' => '1000'],
             ],
         ],
         'dataforseo:chatgpt-llm-scraper-standard' => [
@@ -71,6 +78,14 @@ return [
                 'summary_pages' => ['amount' => '1', 'per' => '1000'],
             ],
         ],
+        'exa:research' => [
+            'source' => 'https://exa.ai/docs/reference/pricing',
+            'notes' => 'Checked 2026-09-10. Auto-effort Agent API usage; fixed-effort runs and enrichment have different rates. Prefer costDollars.total when reported.',
+            'rates' => [
+                'exa:agent_compute_units' => ['amount' => '0.1', 'per' => '1'],
+                'searches' => ['amount' => '0.005', 'per' => '1'],
+            ],
+        ],
         'kagi:fastgpt' => [
             'source' => 'https://help.kagi.com/kagi/api/fastgpt.html',
             'rates' => [
@@ -118,6 +133,18 @@ return [
                 'sandbox_searches' => ['amount' => '0.0025', 'per' => '1'],
             ],
         ],
+        'perplexity:agent-medium' => [
+            'source' => 'https://docs.perplexity.ai/docs/getting-started/pricing',
+            'notes' => 'Checked 2026-09-10. Medium is a dynamic preset; only stable tool rates are included. Routed-model units remain unpriced and provider-reported actual cost wins.',
+            'rates' => [
+                'web_searches' => ['amount' => '0.0025', 'per' => '1'],
+                'fetch_url_requests' => ['amount' => '0.0005', 'per' => '1'],
+                'people_searches' => ['amount' => '0.005', 'per' => '1'],
+                'finance_searches' => ['amount' => '0.005', 'per' => '1'],
+                'sandbox_sessions' => ['amount' => '0.03', 'per' => '1'],
+                'sandbox_searches' => ['amount' => '0.0025', 'per' => '1'],
+            ],
+        ],
         'perplexity:agent-high' => [
             'source' => 'https://docs.perplexity.ai/docs/getting-started/pricing',
             'rates' => [
@@ -127,6 +154,45 @@ return [
                 'finance_searches' => ['amount' => '0.005', 'per' => '1'],
                 'sandbox_sessions' => ['amount' => '0.03', 'per' => '1'],
                 'sandbox_searches' => ['amount' => '0.0025', 'per' => '1'],
+            ],
+        ],
+        'perplexity:search' => [
+            'source' => 'https://docs.perplexity.ai/docs/getting-started/pricing',
+            'notes' => 'Checked 2026-09-10. Price per successful Search API POST request.',
+            'rates' => [
+                'requests' => ['amount' => '5', 'per' => '1000'],
+            ],
+        ],
+        'parallel:turbo' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-09-10. Turbo Search includes up to ten results; additional_results counts only results above ten.',
+            'rates' => [
+                'requests' => ['amount' => '1', 'per' => '1000'],
+                'additional_results' => ['amount' => '1', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-pro' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-09-10. Price per successful Task API run using the pro processor.',
+            'rates' => [
+                'processor_requests' => ['amount' => '100', 'per' => '1000'],
+            ],
+        ],
+        'valyu:research-standard' => [
+            'source' => 'https://docs.valyu.ai/pricing',
+            'notes' => 'Checked 2026-09-10. Base Standard DeepResearch task only. Optional screenshots, code execution, and extra deliverables are separate units and must be included when used. Prefer the response cost when reported.',
+            'rates' => [
+                'research_requests' => ['amount' => '0.5', 'per' => '1'],
+                'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
+                'code_executions' => ['amount' => '0.1', 'per' => '1'],
+                'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
+            ],
+        ],
+        'xai:grok-4.6' => [
+            'source' => 'https://docs.x.ai/developers/pricing',
+            'notes' => 'Checked 2026-09-10. Current Web Search and X Search tool-call rate only. Token rates are omitted because grok-4.6 has context-length tiers that this snapshot cannot select safely. X Search pricing is scheduled to change on 2026-09-21.',
+            'rates' => [
+                'searches' => ['amount' => '5', 'per' => '1000'],
             ],
         ],
     ],

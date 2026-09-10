@@ -31,12 +31,14 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-03')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-10')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
     'Brave Answers' => ['brave', 'answers', 'queries', '4', '1000'],
+    'Brave Search' => ['brave', 'search', 'requests', '5', '1000'],
     'Exa Search' => ['exa', 'search', 'additional_results', '1', '1000'],
+    'Exa Research' => ['exa', 'research', 'exa:agent_compute_units', '0.1', '1'],
     'Kagi FastGPT' => ['kagi', 'fastgpt', 'uncached_queries', '15', '1000'],
     'You Answer' => ['you', 'answer', 'requests', '5', '1000'],
     'You Research Lite' => ['you', 'research-lite', 'requests', '12', '1000'],
@@ -44,7 +46,13 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'You Research Deep' => ['you', 'research-deep', 'requests', '100', '1000'],
     'You Research Exhaustive' => ['you', 'research-exhaustive', 'requests', '450', '1000'],
     'Perplexity Agent Low' => ['perplexity', 'agent-low', 'web_searches', '0.0025', '1'],
+    'Perplexity Agent Medium' => ['perplexity', 'agent-medium', 'web_searches', '0.0025', '1'],
     'Perplexity Agent High' => ['perplexity', 'agent-high', 'sandbox_sessions', '0.03', '1'],
+    'Perplexity Search' => ['perplexity', 'search', 'requests', '5', '1000'],
+    'Parallel Turbo' => ['parallel', 'turbo', 'additional_results', '1', '1000'],
+    'Parallel Research Pro' => ['parallel', 'research-pro', 'processor_requests', '100', '1000'],
+    'Valyu Research Standard' => ['valyu', 'research-standard', 'research_requests', '0.5', '1'],
+    'xAI Grok 4.6' => ['xai', 'grok-4.6', 'searches', '5', '1000'],
 ]);
 
 it('calculates compound rates exactly and reports unknown required units', function (): void {
@@ -85,13 +93,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-03T00:00:00+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-10T00:00:00+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-03T00:00:00+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-10T00:00:00+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -103,7 +111,7 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
     'Google AI Mode Live' => ['google-ai-mode-live', '0.004', '0.028', 'https://dataforseo.com/pricing/serp/google-ai-mode-serp-api'],
 ]);
 
-it('keeps the six DataForSEO identities distinct and records the actual review date without refreshing the snapshot', function (): void {
+it('keeps the six DataForSEO identities distinct and records their actual review date', function (): void {
     $snapshot = packagePricingSnapshot();
     $prices = array_filter(
         $snapshot['prices'],
@@ -111,8 +119,8 @@ it('keeps the six DataForSEO identities distinct and records the actual review d
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(3)
-        ->and($snapshot['retrieved_at'])->toBe('2026-09-03T00:00:00+00:00')
+    expect($snapshot['version'])->toBe(4)
+        ->and($snapshot['retrieved_at'])->toBe('2026-09-10T00:00:00+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -156,6 +164,54 @@ it('keeps frontier research and unknown SKUs unavailable', function (string $pro
     ['perplexity', 'agent-auto'],
     ['searchapi', 'search'],
     ['searchapi', 'google'],
+    ['tavily', 'search'],
+    ['jina', 'search'],
+    ['serpapi', 'search'],
+    ['gemini', 'deep-research'],
+    ['parallel', 'search'],
+    ['valyu', 'search'],
+    ['firecrawl', 'search'],
     ['dataforseo', 'llm-responses'],
     ['dataforseo', 'google-ai-mode-high-priority'],
 ]);
+
+it('covers every PHP parity profile with its pricing identity and disposition', function (string $provider, string $sku, bool $hasBuiltInRate): void {
+    $definition = packagePricingSource()->find(new ModelIdentity($provider, $sku));
+
+    expect($definition !== null)->toBe($hasBuiltInRate);
+})->with([
+    'brave-search/search' => ['brave', 'search', true],
+    'tavily/search' => ['tavily', 'search', false],
+    'perplexity-search/search' => ['perplexity', 'search', true],
+    'perplexity-deep-research/research medium' => ['perplexity', 'agent-medium', true],
+    'jina-search/search' => ['jina', 'search', false],
+    'serpapi/search' => ['serpapi', 'search', false],
+    'exa/research' => ['exa', 'research', true],
+    'gemini-deep/research' => ['gemini', 'deep-research', false],
+    'grok-x-only/x' => ['xai', 'grok-4.6', true],
+    'grok-combined/combined' => ['xai', 'grok-4.6', true],
+    'parallel/search' => ['parallel', 'search', false],
+    'parallel/turbo' => ['parallel', 'turbo', true],
+    'parallel/research pro' => ['parallel', 'research-pro', true],
+    'valyu/search' => ['valyu', 'search', false],
+    'valyu/research standard' => ['valyu', 'research-standard', true],
+    'firecrawl-search/search' => ['firecrawl', 'search', false],
+]);
+
+it('keeps variable components partial and missing or zero usage unavailable', function (): void {
+    $xai = packagePricingSource()->find(new ModelIdentity('xai', 'grok-4.6'));
+    $partial = (new CostCalculator)->calculate(
+        new Usage(['input_tokens' => 250_000, 'output_tokens' => 1_000, 'searches' => 2]),
+        $xai,
+    );
+    $missing = (new CostCalculator)->calculate(new Usage([]), $xai);
+    $zero = (new CostCalculator)->calculate(new Usage(['searches' => 0]), $xai);
+
+    expect((string) $partial->cost?->amount)->toBe('0.01')
+        ->and($partial->completeness)->toBe(CostCompleteness::Partial)
+        ->and($partial->missingUnits)->toBe(['input_tokens', 'output_tokens'])
+        ->and($missing->cost)->toBeNull()
+        ->and($missing->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($zero->cost)->toBeNull()
+        ->and($zero->completeness)->toBe(CostCompleteness::Unavailable);
+});
