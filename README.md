@@ -90,7 +90,7 @@ Non-model APIs use a documented pricing SKU in the existing `model` field. The p
 | `dataforseo` | `gemini-llm-scraper-standard`, `gemini-llm-scraper-live` | `requests` |
 | `dataforseo` | `google-ai-mode-standard`, `google-ai-mode-live` | `requests` |
 | `exa` | `search` | `requests`, `additional_results`, `summary_pages` |
-| `exa` | `research` | `exa:agent_compute_units`, `searches` |
+| `exa` | `research` | `agent_compute_units`, `searches` |
 | `kagi` | `fastgpt` | `uncached_queries` |
 | `you` | `answer` | `requests` |
 | `you` | `research-lite`, `research-standard`, `research-deep`, `research-exhaustive` | `requests` |
@@ -131,7 +131,7 @@ These prices are estimates, not invoices. Provider-reported actual cost still wi
 
 Perplexity Agent presets route across models and tools, so the preset SKUs contain only stable tool rates. A quote with tool usage and unpriced routed-model units is partial; model-only usage is unavailable. Prefer the completed response's provider-reported `usage.cost.total_cost` whenever present. The package does not treat representative preset runs as fixed prices or maximums.
 
-Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`exa:agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 pricing changes above the context threshold; the current X Search billing model is also scheduled to change on September 21, 2026.
+Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 pricing changes above the context threshold; the current X Search billing model is also scheduled to change on September 21, 2026.
 
 SearchAPI charges successful searches at an account-plan-specific rate, so `searchapi:search` is unavailable by default. Configure the `successful_search_request` unit with your account rate before enforcing a budget. For example, if your account charges USD 4 per 1,000 successful requests:
 

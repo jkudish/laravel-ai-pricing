@@ -38,7 +38,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'Brave Answers' => ['brave', 'answers', 'queries', '4', '1000'],
     'Brave Search' => ['brave', 'search', 'requests', '5', '1000'],
     'Exa Search' => ['exa', 'search', 'additional_results', '1', '1000'],
-    'Exa Research' => ['exa', 'research', 'exa:agent_compute_units', '0.1', '1'],
+    'Exa Research' => ['exa', 'research', 'agent_compute_units', '0.1', '1'],
     'Kagi FastGPT' => ['kagi', 'fastgpt', 'uncached_queries', '15', '1000'],
     'You Answer' => ['you', 'answer', 'requests', '5', '1000'],
     'You Research Lite' => ['you', 'research-lite', 'requests', '12', '1000'],

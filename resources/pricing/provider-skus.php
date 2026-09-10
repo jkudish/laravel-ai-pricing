@@ -82,7 +82,7 @@ return [
             'source' => 'https://exa.ai/docs/reference/pricing',
             'notes' => 'Checked 2026-09-10. Auto-effort Agent API usage; fixed-effort runs and enrichment have different rates. Prefer costDollars.total when reported.',
             'rates' => [
-                'exa:agent_compute_units' => ['amount' => '0.1', 'per' => '1'],
+                'agent_compute_units' => ['amount' => '0.1', 'per' => '1'],
                 'searches' => ['amount' => '0.005', 'per' => '1'],
             ],
         ],
