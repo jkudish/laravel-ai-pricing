@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bound `brick/math` compatibility to the versions supported by Laravel 13.
 - Grok 4.6 token-only quotes now remain unavailable instead of using incompatible flat token pricing from the Portkey fallback.
 
 ## [0.1.1] - 2026-09-09
