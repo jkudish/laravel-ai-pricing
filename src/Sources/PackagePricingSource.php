@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jkudish\LaravelAiPricing\Sources;
 
 use DateTimeImmutable;
+use Jkudish\LaravelAiPricing\Contracts\FallbackPolicy;
 use Jkudish\LaravelAiPricing\Contracts\PricingCatalog;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
@@ -12,7 +13,7 @@ use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Jkudish\LaravelAiPricing\ValueObjects\Rate;
 use Override;
 
-final readonly class PackagePricingSource implements PricingCatalog
+final readonly class PackagePricingSource implements FallbackPolicy, PricingCatalog
 {
     /**
      * @param array{
@@ -20,6 +21,7 @@ final readonly class PackagePricingSource implements PricingCatalog
      *     retrieved_at: string,
      *     effective_at: string|null,
      *     currency: string,
+     *     fallback_blocked?: list<string>,
      *     prices: array<string, array{
      *         source: string,
      *         notes?: string,
@@ -63,6 +65,12 @@ final readonly class PackagePricingSource implements PricingCatalog
     public function sync(): int
     {
         return count($this->snapshot['prices']);
+    }
+
+    #[Override]
+    public function allowsFallback(ModelIdentity $identity): bool
+    {
+        return ! in_array($identity->key(), $this->snapshot['fallback_blocked'] ?? [], true);
     }
 
     private function date(?string $date): ?DateTimeImmutable

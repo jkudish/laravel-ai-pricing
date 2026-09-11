@@ -125,7 +125,7 @@ The PHP v2 parity profiles use these pricing identities and dispositions:
 | `valyu/research` (standard) | `valyu:research-standard` | Built-in Standard base and optional-tool rates; provider-reported response cost is preferred. |
 | `firecrawl-search/search` | `firecrawl:search` | Configured-only: the API uses fixed credits, but USD per credit depends on the account plan. |
 
-Configured-only and unavailable identities are intentionally absent from the package snapshot, so unresolved usage returns unavailable rather than a fabricated zero. Configure the exact identity and account rate when you can prove its applicability.
+Configured-only and unavailable identities are recorded as fallback-blocked policy, not zero-value price entries. This prevents a coincidentally named Portkey model from supplying an incompatible price, while still allowing provider-reported actual cost or an explicitly configured application rate. Configure the exact identity and account rate when you can prove its applicability.
 
 The DataForSEO SKU names identify products and modes; they are not assertions about the underlying model. For these SKUs, `requests: 1` means one restricted billable task/result-page submission. A normal-priority Standard submission is billed once and its later retrieval GETs are free, so do not count those GETs as additional requests. The built-in prices cover only the base normal Standard and Live operations reviewed from DataForSEO's official pages on 2026-09-06. They exclude high-priority, bulk, HTML, rectangle, and other surcharged options. LLM Scraper pricing does not apply to LLM Responses.
 

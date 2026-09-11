@@ -12,6 +12,17 @@ return [
     'retrieved_at' => '2026-09-10T00:00:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
+    'fallback_blocked' => [
+        'you:research-frontier',
+        'searchapi:search',
+        'tavily:search',
+        'jina:search',
+        'serpapi:search',
+        'gemini:deep-research',
+        'parallel:search',
+        'valyu:search',
+        'firecrawl:search',
+    ],
     'prices' => [
         'brave:answers' => [
             'source' => 'https://api-dashboard.search.brave.com/documentation/services/answers',

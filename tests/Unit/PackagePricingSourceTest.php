@@ -11,13 +11,13 @@ use Jkudish\LaravelAiPricing\ValueObjects\Usage;
 
 function packagePricingSource(): PackagePricingSource
 {
-    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
+    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
     $snapshot = require __DIR__.'/../../resources/pricing/provider-skus.php';
 
     return new PackagePricingSource($snapshot);
 }
 
-/** @return array{version: int, retrieved_at: string, effective_at: string|null, currency: string, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} */
+/** @return array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} */
 function packagePricingSnapshot(): array
 {
     return require __DIR__.'/../../resources/pricing/provider-skus.php';
@@ -182,6 +182,24 @@ it('keeps frontier research and unknown SKUs unavailable', function (string $pro
     ['dataforseo', 'llm-responses'],
     ['dataforseo', 'google-ai-mode-high-priority'],
 ]);
+
+it('blocks remote fallback only for identities explicitly declared unavailable', function (string $provider, string $sku): void {
+    expect(packagePricingSource()->allowsFallback(new ModelIdentity($provider, $sku)))->toBeFalse();
+})->with([
+    ['you', 'research-frontier'],
+    ['searchapi', 'search'],
+    ['tavily', 'search'],
+    ['jina', 'search'],
+    ['serpapi', 'search'],
+    ['gemini', 'deep-research'],
+    ['parallel', 'search'],
+    ['valyu', 'search'],
+    ['firecrawl', 'search'],
+]);
+
+it('allows remote fallback for an undeclared identity', function (): void {
+    expect(packagePricingSource()->allowsFallback(new ModelIdentity('other', 'search')))->toBeTrue();
+});
 
 it('covers every PHP parity profile with its pricing identity and disposition', function (string $provider, string $sku, bool $hasBuiltInRate): void {
     $definition = packagePricingSource()->find(new ModelIdentity($provider, $sku));

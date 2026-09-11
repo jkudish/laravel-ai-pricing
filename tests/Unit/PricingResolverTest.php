@@ -37,6 +37,14 @@ function price(ModelIdentity $identity, PricingSource $source, string $amount): 
     return new PriceDefinition($identity, ['input_tokens' => new Rate('input_tokens', $amount)], $source);
 }
 
+function packageFallbackPolicy(): PackagePricingSource
+{
+    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
+    $snapshot = require __DIR__.'/../../resources/pricing/provider-skus.php';
+
+    return new PackagePricingSource($snapshot);
+}
+
 it('uses provider reported cost before every catalog', function (): void {
     $identity = new ModelIdentity('provider', 'model');
     $resolver = new PricingResolver(
@@ -87,13 +95,12 @@ it('uses a remote native catalog before a package snapshot and the snapshot befo
 
 it('uses the conservative xAI snapshot instead of incompatible fallback token rates', function (): void {
     $identity = new ModelIdentity('xai', 'grok-4.6');
-    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
-    $snapshot = require __DIR__.'/../../resources/pricing/provider-skus.php';
+    $snapshot = packageFallbackPolicy();
     $resolver = new PricingResolver(
         configured: catalog(null),
         native: catalog(null),
         fallback: catalog(price($identity, PricingSource::Portkey, '0.001')),
-        snapshot: new PackagePricingSource($snapshot),
+        snapshot: $snapshot,
     );
 
     $tokenOnly = $resolver->resolve(new PricingObservation($identity, Usage::tokens(1, 0)));
@@ -108,6 +115,62 @@ it('uses the conservative xAI snapshot instead of incompatible fallback token ra
         ->and($withSearch->completeness)->toBe(CostCompleteness::Partial)
         ->and($withSearch->missingUnits)->toBe(['input_tokens'])
         ->and($withSearch->source)->toBe(PricingSource::ProviderNative);
+});
+
+it('blocks fallback pricing only for identities declared unavailable without a package rate', function (): void {
+    $blocked = new ModelIdentity('tavily', 'search');
+    $unblocked = new ModelIdentity('other', 'search');
+    $resolver = new PricingResolver(
+        configured: catalog(null),
+        native: catalog(null),
+        fallback: catalog(price($unblocked, PricingSource::Portkey, '4')),
+        snapshot: packageFallbackPolicy(),
+    );
+
+    $blockedQuote = $resolver->resolve(new PricingObservation($blocked, Usage::tokens(1, 0)));
+    $unblockedQuote = $resolver->resolve(new PricingObservation($unblocked, Usage::tokens(1, 0)));
+
+    expect($blockedQuote->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($blockedQuote->cost)->toBeNull()
+        ->and($unblockedQuote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($unblockedQuote->source)->toBe(PricingSource::Portkey)
+        ->and((string) $unblockedQuote->cost?->amount)->toBe('4');
+});
+
+it('uses explicit configured pricing for an identity whose remote fallback is blocked', function (): void {
+    $identity = new ModelIdentity('parallel', 'search');
+    $resolver = new PricingResolver(
+        configured: catalog(price($identity, PricingSource::Configured, '2')),
+        native: catalog(null),
+        fallback: catalog(price($identity, PricingSource::Portkey, '4')),
+        snapshot: packageFallbackPolicy(),
+    );
+
+    $quote = $resolver->resolve(new PricingObservation($identity, Usage::tokens(1, 0)));
+
+    expect($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->source)->toBe(PricingSource::Configured)
+        ->and((string) $quote->cost?->amount)->toBe('2');
+});
+
+it('uses provider reported cost for an identity whose remote fallback is blocked', function (): void {
+    $identity = new ModelIdentity('firecrawl', 'search');
+    $resolver = new PricingResolver(
+        configured: catalog(price($identity, PricingSource::Configured, '2')),
+        native: catalog(null),
+        fallback: catalog(price($identity, PricingSource::Portkey, '4')),
+        snapshot: packageFallbackPolicy(),
+    );
+
+    $quote = $resolver->resolve(new PricingObservation(
+        $identity,
+        Usage::tokens(1, 0),
+        providerReportedCost: new Money('0.42'),
+    ));
+
+    expect($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->source)->toBe(PricingSource::ProviderReported)
+        ->and((string) $quote->cost?->amount)->toBe('0.42');
 });
 
 it('returns unavailable without throwing when prices are missing', function (): void {

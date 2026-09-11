@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jkudish\LaravelAiPricing;
 
 use Jkudish\LaravelAiPricing\Contracts\CostResolver;
+use Jkudish\LaravelAiPricing\Contracts\FallbackPolicy;
 use Jkudish\LaravelAiPricing\Contracts\PricingCatalog;
 use Jkudish\LaravelAiPricing\Enums\CostCompleteness;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
@@ -40,11 +41,17 @@ final readonly class PricingResolver implements CostResolver
             );
         }
 
-        $pricing = $this->configured->find($observation->identity)
-            ?? $observation->providerNativePricing
-            ?? $this->native->find($observation->identity)
-            ?? $this->snapshot?->find($observation->identity)
-            ?? $this->fallback->find($observation->identity);
+        $pricing = $this->configured->find($observation->identity);
+
+        if ($pricing === null) {
+            $pricing = $observation->providerNativePricing
+                ?? $this->native->find($observation->identity)
+                ?? $this->snapshot?->find($observation->identity);
+        }
+
+        if ($pricing === null && $this->allowsFallback($observation)) {
+            $pricing = $this->fallback->find($observation->identity);
+        }
 
         if ($pricing === null) {
             return CostQuote::unavailable();
@@ -55,5 +62,11 @@ final readonly class PricingResolver implements CostResolver
         }
 
         return $this->calculator->calculate($observation->usage, $pricing);
+    }
+
+    private function allowsFallback(PricingObservation $observation): bool
+    {
+        return ! $this->snapshot instanceof FallbackPolicy
+            || $this->snapshot->allowsFallback($observation->identity);
     }
 }
