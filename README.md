@@ -82,25 +82,58 @@ The first compatible price wins. The package does not convert currencies. A USD 
 
 Non-model APIs use a documented pricing SKU in the existing `model` field. The package includes a reviewed, versioned USD snapshot for products that do not publish a suitable machine-readable runtime catalog:
 
+The snapshot-level `retrieved_at` records when the package snapshot was assembled. Individual `notes` retain an earlier per-SKU source review date when an unchanged entry was carried forward.
+
 | Provider | SKU | Usage units |
 | --- | --- | --- |
 | `brave` | `answers` | `queries`, `input_tokens`, `output_tokens` |
+| `brave` | `search` | `requests` |
 | `dataforseo` | `chatgpt-llm-scraper-standard`, `chatgpt-llm-scraper-live` | `requests` |
 | `dataforseo` | `gemini-llm-scraper-standard`, `gemini-llm-scraper-live` | `requests` |
 | `dataforseo` | `google-ai-mode-standard`, `google-ai-mode-live` | `requests` |
 | `exa` | `search` | `requests`, `additional_results`, `summary_pages` |
+| `exa` | `research` | `agent_compute_units`, `searches` |
 | `kagi` | `fastgpt` | `uncached_queries` |
 | `you` | `answer` | `requests` |
 | `you` | `research-lite`, `research-standard`, `research-deep`, `research-exhaustive` | `requests` |
-| `perplexity` | `agent-low`, `agent-high` | `web_searches`, `fetch_url_requests`, `people_searches`, `finance_searches`, `sandbox_sessions`, `sandbox_searches` |
+| `perplexity` | `agent-low`, `agent-medium`, `agent-high` | `web_searches`, `fetch_url_requests`, `people_searches`, `finance_searches`, `sandbox_sessions`, `sandbox_searches` |
+| `perplexity` | `search` | `requests` |
+| `parallel` | `turbo` | `requests`, `additional_results` |
+| `parallel` | `research-pro` | `processor_requests` |
+| `valyu` | `research-standard` | `research_requests`, `screenshot_urls`, `code_executions`, `additional_deliverables` |
+| `xai` | `grok-4.6` | `searches` |
 
 The Exa request rate includes up to ten results; pass only results above ten as `additional_results`. Pass `uncached_queries: 0` for a free cached Kagi response. You.com Frontier Research has negotiated usage and is intentionally unavailable.
+
+The PHP v2 parity profiles use these pricing identities and dispositions:
+
+| Provider/profile | Pricing identity | Disposition |
+| --- | --- | --- |
+| `brave-search/search` | `brave:search` | Built-in fixed request rate. |
+| `tavily/search` | `tavily:search` | Configured-only: USD per credit depends on the account plan; Basic uses one credit and Advanced uses two. |
+| `perplexity-search/search` | `perplexity:search` | Built-in fixed rate per successful request. |
+| `perplexity-deep-research/research` (medium) | `perplexity:agent-medium` | Built-in stable tool rates only; routed model usage remains partial or unavailable. |
+| `jina-search/search` | `jina:search` | Unavailable: Jina publishes token consumption without a stable public USD conversion. |
+| `serpapi/search` | `serpapi:search` | Configured-only: rates and speed multipliers depend on the account plan. |
+| `exa/research` | `exa:research` | Built-in Auto-effort ACU and search rates; fixed efforts and enrichment require their applicable rates. |
+| `gemini-deep/research` | `gemini:deep-research` | Unavailable: model, intermediate token, and tool quantities are provider-controlled. |
+| `grok-x-only/x`, `grok-combined/combined` | `xai:grok-4.6` | Built-in current search-tool rate only; context-tiered model tokens remain partial or unavailable. |
+| `parallel/search` | `parallel:search` | Configured-only: the selectable mode and additional-result count determine the price. |
+| `parallel/turbo` | `parallel:turbo` | Built-in fixed Turbo request and additional-result rates. |
+| `parallel/research` (pro) | `parallel:research-pro` | Built-in fixed rate per successful pro processor run; other processors need distinct configured identities. |
+| `valyu/search` | `valyu:search` | Unavailable: every result can use a differently priced source class. |
+| `valyu/research` (standard) | `valyu:research-standard` | Built-in Standard base and optional-tool rates; provider-reported response cost is preferred. |
+| `firecrawl-search/search` | `firecrawl:search` | Configured-only: the API uses fixed credits, but USD per credit depends on the account plan. |
+
+Configured-only and unavailable identities are recorded as fallback-blocked policy, not zero-value price entries. This prevents a coincidentally named Portkey model from supplying an incompatible price, while still allowing provider-reported actual cost or an explicitly configured application rate. Configure the exact identity and account rate when you can prove its applicability.
 
 The DataForSEO SKU names identify products and modes; they are not assertions about the underlying model. For these SKUs, `requests: 1` means one restricted billable task/result-page submission. A normal-priority Standard submission is billed once and its later retrieval GETs are free, so do not count those GETs as additional requests. The built-in prices cover only the base normal Standard and Live operations reviewed from DataForSEO's official pages on 2026-09-06. They exclude high-priority, bulk, HTML, rectangle, and other surcharged options. LLM Scraper pricing does not apply to LLM Responses.
 
 These prices are estimates, not invoices. Provider-reported actual cost still wins, failures may be charged, and missing usage produces an unavailable result rather than a zero quote. This package supplies pricing identities only; it does not implement DataForSEO task submission, polling, or retrieval.
 
 Perplexity Agent presets route across models and tools, so the preset SKUs contain only stable tool rates. A quote with tool usage and unpriced routed-model units is partial; model-only usage is unavailable. Prefer the completed response's provider-reported `usage.cost.total_cost` whenever present. The package does not treat representative preset runs as fixed prices or maximums.
+
+Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 pricing changes above the context threshold; the current X Search billing model is also scheduled to change on September 21, 2026, so re-review this entry before any release on or after that date. Because the reviewed snapshot precedes the Portkey fallback, this partial xAI entry deliberately prevents incompatible flat fallback token rates from being applied to `grok-4.6`; token-only usage is unavailable, and search plus token usage is partial.
 
 SearchAPI charges successful searches at an account-plan-specific rate, so `searchapi:search` is unavailable by default. Configure the `successful_search_request` unit with your account rate before enforcing a budget. For example, if your account charges USD 4 per 1,000 successful requests:
 
@@ -160,7 +193,7 @@ Prices use a `provider:model` key. Use decimal strings for rates and divisors:
 ],
 ```
 
-Configured prices are used before remote catalogs. Provider-reported cost still takes precedence because it describes the completed request.
+Configured prices are used before remote catalogs. A configured identity replaces the snapshot definition; its units are not merged with built-in units. For example, an `xai:grok-4.6` override that still prices search tools must include `searches`. Provider-reported cost still takes precedence because it describes the completed request.
 
 ## Quoting a request before it runs
 
