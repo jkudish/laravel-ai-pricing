@@ -115,6 +115,8 @@ The PHP v2 parity profiles use these pricing identities and dispositions:
 | `perplexity-deep-research/research` (medium) | `perplexity:agent-medium` | Built-in stable tool rates only; routed model usage remains partial or unavailable. |
 | `jina-search/search` | `jina:search` | Unavailable: Jina publishes token consumption without a stable public USD conversion. |
 | `serpapi/search` | `serpapi:search` | Configured-only: rates and speed multipliers depend on the account plan. |
+| `serpbase/search` | `serpbase:search` | Configured-only: use the account's actual price per credit, not a public headline minimum. |
+| `serpbase/news` | `serpbase:news` | Configured-only: use the account's actual price per credit, not a public headline minimum. |
 | `exa/research` | `exa:research` | Built-in Auto-effort ACU and search rates; fixed efforts and enrichment require their applicable rates. |
 | `gemini-deep/research` | `gemini:deep-research` | Unavailable: model, intermediate token, and tool quantities are provider-controlled. |
 | `grok-x-only/x`, `grok-combined/combined` | `xai:grok-4.6` | Built-in current search-tool rate only; context-tiered model tokens remain partial or unavailable. |
@@ -150,6 +152,23 @@ SearchAPI charges successful searches at an account-plan-specific rate, so `sear
 ```
 
 After configuration, the resolver returns a Complete configured quote. A Google AI Overview workflow that makes two successful SearchAPI requests must pass `successful_search_request: 2`.
+
+SerpBase Search and News are also unavailable by default. Configure each
+identity with the account's current `credits` rate before using a hard budget:
+
+```php
+'prices' => [
+    'serpbase:search' => [
+        'credits' => ['amount' => '0.00047', 'currency' => 'USD'],
+    ],
+    'serpbase:news' => [
+        'credits' => ['amount' => '0.00047', 'currency' => 'USD'],
+    ],
+],
+```
+
+The example amount is illustrative only. Do not derive either configured rate
+from a public minimum; use the effective price for the consuming account.
 
 Snapshot entries include source and retrieval metadata in `resources/pricing/provider-skus.php`. Future rate changes should follow `.agents/skills/fetching-provider-pricing`; runtime code never scrapes provider pricing pages.
 
