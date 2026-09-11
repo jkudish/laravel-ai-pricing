@@ -18,6 +18,8 @@ return [
         'tavily:search',
         'jina:search',
         'serpapi:search',
+        'serpbase:search',
+        'serpbase:news',
         'gemini:deep-research',
         'parallel:search',
         'valyu:search',
