@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Reviewed provider-parity pricing identities for Brave Search, Perplexity Search and Agent Medium, Exa Research, Parallel Turbo and Research Pro, Valyu Research Standard, and xAI Grok 4.6 search tools.
+- Configured-only SerpBase Search and News pricing identities, with account-specific credit rates required before hard-budget use.
 
 ### Changed
 
