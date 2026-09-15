@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-15
+
 ### Added
 
 - Reviewed provider-parity pricing identities for Brave Search, Perplexity Search and Agent Medium, Exa Research, Parallel Turbo and Research Pro, Valyu Research Standard, and xAI Grok 4.6 search tools.
+- Configured-only SerpBase Search and News pricing identities, with account-specific credit rates required before hard-budget use.
 
 ### Changed
 
@@ -44,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.1...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.2...main
+[0.1.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jkudish/laravel-ai-pricing/releases/tag/v0.1.1
 [0.1.0]: https://github.com/jkudish/laravel-ai-pricing/releases/tag/v0.1.0
