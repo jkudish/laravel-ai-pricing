@@ -8,11 +8,13 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 4,
-    'retrieved_at' => '2026-09-10T00:00:00+00:00',
+    'version' => 5,
+    'retrieved_at' => '2026-09-17T00:00:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
+        'anthropic:claude-sonnet-5',
+        'anthropic:claude-sonnet-5-us',
         'you:research-frontier',
         'searchapi:search',
         'tavily:search',
@@ -26,6 +28,14 @@ return [
         'firecrawl:search',
     ],
     'prices' => [
+        'anthropic:claude-sonnet-5-global' => [
+            'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
+            'notes' => 'Checked 2026-09-17. Claude API global routing (the default) for Claude Sonnet 5 base input and output tokens only. The generic model identity is intentionally not priced because inference_geo=us costs 1.1x. Prompt-cache writes and reads require their exact usage units and TTL-specific rates; web search is a separate billed unit.',
+            'rates' => [
+                'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+            ],
+        ],
         'brave:answers' => [
             'source' => 'https://api-dashboard.search.brave.com/documentation/services/answers',
             'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
