@@ -31,10 +31,11 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-10')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-17')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
+    'Claude Sonnet 5' => ['anthropic', 'claude-sonnet-5', 'input_tokens', '2', '1000000'],
     'Brave Answers' => ['brave', 'answers', 'queries', '4', '1000'],
     'Brave Search' => ['brave', 'search', 'requests', '5', '1000'],
     'Exa Search' => ['exa', 'search', 'additional_results', '1', '1000'],
@@ -54,6 +55,26 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'Valyu Research Standard' => ['valyu', 'research-standard', 'research_requests', '0.5', '1'],
     'xAI Grok 4.6' => ['xai', 'grok-4.6', 'searches', '5', '1000'],
 ]);
+
+it('quotes Claude Sonnet 5 base tokens exactly and leaves undeclared billed units missing', function (): void {
+    $definition = packagePricingSource()->find(new ModelIdentity('anthropic', 'claude-sonnet-5'));
+    $complete = (new CostCalculator)->calculate(
+        new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000]),
+        $definition,
+    );
+    $partial = (new CostCalculator)->calculate(
+        new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000, 'web_searches' => 1]),
+        $definition,
+    );
+
+    expect((string) $complete->cost?->amount)->toBe('2.64')
+        ->and($complete->completeness)->toBe(CostCompleteness::Complete)
+        ->and($complete->source)->toBe(PricingSource::ProviderNative)
+        ->and($complete->provenance?->reference)->toBe('https://platform.claude.com/docs/en/models/sonnet-5/overview')
+        ->and((string) $partial->cost?->amount)->toBe('2.64')
+        ->and($partial->completeness)->toBe(CostCompleteness::Partial)
+        ->and($partial->missingUnits)->toBe(['web_searches']);
+});
 
 it('calculates compound rates exactly and reports unknown required units', function (): void {
     $definition = packagePricingSource()->find(new ModelIdentity('brave', 'answers'));
@@ -93,13 +114,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-10T00:00:00+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-17T00:00:00+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-10T00:00:00+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-17T00:00:00+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -119,8 +140,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(4)
-        ->and($snapshot['retrieved_at'])->toBe('2026-09-10T00:00:00+00:00')
+    expect($snapshot['version'])->toBe(5)
+        ->and($snapshot['retrieved_at'])->toBe('2026-09-17T00:00:00+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -139,7 +160,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10)\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10|17)\./');
     }
 });
 

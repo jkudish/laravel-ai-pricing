@@ -117,6 +117,32 @@ it('uses the conservative xAI snapshot instead of incompatible fallback token ra
         ->and($withSearch->source)->toBe(PricingSource::ProviderNative);
 });
 
+it('uses the complete Claude package snapshot before fallback and exposes missing units', function (): void {
+    $identity = new ModelIdentity('anthropic', 'claude-sonnet-5');
+    $resolver = new PricingResolver(
+        configured: catalog(null),
+        native: catalog(null),
+        fallback: catalog(price($identity, PricingSource::Portkey, '99')),
+        snapshot: packageFallbackPolicy(),
+    );
+
+    $complete = $resolver->resolve(new PricingObservation(
+        $identity,
+        new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000]),
+    ));
+    $partial = $resolver->resolve(new PricingObservation(
+        $identity,
+        new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000, 'cache_write_input_tokens_1h' => 1]),
+    ));
+
+    expect((string) $complete->cost?->amount)->toBe('2.64')
+        ->and($complete->completeness)->toBe(CostCompleteness::Complete)
+        ->and($complete->source)->toBe(PricingSource::ProviderNative)
+        ->and((string) $partial->cost?->amount)->toBe('2.64')
+        ->and($partial->completeness)->toBe(CostCompleteness::Partial)
+        ->and($partial->missingUnits)->toBe(['cache_write_input_tokens_1h']);
+});
+
 it('blocks fallback pricing only for identities declared unavailable without a package rate', function (): void {
     $blocked = new ModelIdentity('tavily', 'search');
     $unblocked = new ModelIdentity('other', 'search');
