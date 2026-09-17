@@ -35,7 +35,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
-    'Claude Sonnet 5' => ['anthropic', 'claude-sonnet-5', 'input_tokens', '2', '1000000'],
+    'Claude Sonnet 5 global routing' => ['anthropic', 'claude-sonnet-5-global', 'input_tokens', '2', '1000000'],
     'Brave Answers' => ['brave', 'answers', 'queries', '4', '1000'],
     'Brave Search' => ['brave', 'search', 'requests', '5', '1000'],
     'Exa Search' => ['exa', 'search', 'additional_results', '1', '1000'],
@@ -56,8 +56,8 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'xAI Grok 4.6' => ['xai', 'grok-4.6', 'searches', '5', '1000'],
 ]);
 
-it('quotes Claude Sonnet 5 base tokens exactly and leaves undeclared billed units missing', function (): void {
-    $definition = packagePricingSource()->find(new ModelIdentity('anthropic', 'claude-sonnet-5'));
+it('quotes Claude Sonnet 5 global routing exactly and leaves undeclared billed units missing', function (): void {
+    $definition = packagePricingSource()->find(new ModelIdentity('anthropic', 'claude-sonnet-5-global'));
     $complete = (new CostCalculator)->calculate(
         new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000]),
         $definition,
@@ -70,11 +70,19 @@ it('quotes Claude Sonnet 5 base tokens exactly and leaves undeclared billed unit
     expect((string) $complete->cost?->amount)->toBe('2.64')
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
-        ->and($complete->provenance?->reference)->toBe('https://platform.claude.com/docs/en/models/sonnet-5/overview')
+        ->and($complete->provenance?->reference)->toBe('https://platform.claude.com/docs/en/about-claude/pricing')
         ->and((string) $partial->cost?->amount)->toBe('2.64')
         ->and($partial->completeness)->toBe(CostCompleteness::Partial)
         ->and($partial->missingUnits)->toBe(['web_searches']);
 });
+
+it('does not apply the global Claude rate to generic or US-only identities', function (string $sku): void {
+    expect(packagePricingSource()->find(new ModelIdentity('anthropic', $sku)))->toBeNull()
+        ->and(packagePricingSource()->allowsFallback(new ModelIdentity('anthropic', $sku)))->toBeFalse();
+})->with([
+    'generic model identity' => 'claude-sonnet-5',
+    'US-only routing identity' => 'claude-sonnet-5-us',
+]);
 
 it('calculates compound rates exactly and reports unknown required units', function (): void {
     $definition = packagePricingSource()->find(new ModelIdentity('brave', 'answers'));
