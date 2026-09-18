@@ -79,7 +79,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-feature/3772-claude-sonnet-pricing": "0.1.x-dev"
+          "dev-feature/grounded-bounds-integration": "0.1.x-dev"
         },
         "laravel": {
             "providers": [
