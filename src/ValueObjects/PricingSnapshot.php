@@ -15,22 +15,38 @@ final readonly class PricingSnapshot
     }
 
     /**
-     * PostgreSQL jsonb persistence normalizes object key order, so the
-     * fingerprint must be computed over a canonically key-sorted encoding to
-     * stay valid after a storage round trip.
+     * PostgreSQL jsonb persistence normalizes object key order, so a
+     * definition rebuilt from storage can only reproduce its fingerprint
+     * when the only ordering that varies through that round trip is
+     * normalized here: the rates map. Every other key order is re-emitted
+     * deterministically by the value objects, so canonicalizing more than
+     * the rates map would change fingerprints of already-persisted
+     * snapshots that were computed over the legacy encoding.
      *
-     * @param  array<mixed, mixed>  $value
-     * @return array<mixed, mixed>
+     * The rates map is sorted the way jsonb itself sorts object keys: by
+     * key length first, then bytewise (for example `cached_input_tokens`
+     * sorts before `cache_write_input_tokens` in jsonb even though plain
+     * bytewise sorting would reverse them).
+     *
+     * @param  array<string, mixed>  $value
+     * @return array<string, mixed>
      */
     private function canonical(array $value): array
     {
-        ksort($value);
+        $value['rates'] = self::sortKeysJsonbOrder($value['rates'] ?? []);
 
-        foreach ($value as $key => $item) {
-            if (is_array($item)) {
-                $value[$key] = $this->canonical($item);
-            }
-        }
+        return $value;
+    }
+
+    /**
+     * @param  array<string, mixed>  $value
+     * @return array<string, mixed>
+     */
+    private static function sortKeysJsonbOrder(array $value): array
+    {
+        uksort($value, static function (string $a, string $b): int {
+            return [strlen($a), $a] <=> [strlen($b), $b];
+        });
 
         return $value;
     }

@@ -82,39 +82,104 @@ it('keeps pricing fingerprints stable across a jsonb key-order round trip', func
     $definition = new PriceDefinition(
         new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
         [
-            'input_tokens' => new Rate('input_tokens', '4', '1000000'),
-            'output_tokens' => new Rate('output_tokens', '18', '1000000'),
-            'cached_input_tokens' => new Rate('cached_input_tokens', '0.4', '1000000'),
+            // Constructed in non-jsonb order to prove the rates map is the
+            // only ordering that survives the round trip through storage.
             'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '5', '1000000'),
             'exa_search_requests' => new Rate('exa_search_requests', '0.007', '1'),
+            'output_tokens' => new Rate('output_tokens', '18', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.4', '1000000'),
+            'input_tokens' => new Rate('input_tokens', '4', '1000000'),
         ],
         PricingSource::ProviderNative,
     );
     $snapshot = new PricingSnapshot($definition);
 
-    // PostgreSQL jsonb normalizes object key order; decode with ksort on every
-    // nested object to model that storage round trip before re-fingerprinting.
-    $encoded = json_encode($snapshot->toArray()['definition'], JSON_THROW_ON_ERROR);
-    assert(is_string($encoded));
-    $decoded = json_decode($encoded, true, flags: JSON_THROW_ON_ERROR);
-    assert(is_array($decoded));
-    $reordered = json_decode(json_encode($decoded, JSON_THROW_ON_ERROR | JSON_FORCE_OBJECT), true, flags: JSON_THROW_ON_ERROR);
-    assert(is_array($reordered));
-    ksort($reordered);
-    foreach ($reordered as $key => $value) {
-        if (is_array($value)) {
-            ksort($value);
-            $reordered[$key] = $value;
-        }
-    }
+    // Model the exact jsonb round trip: PostgreSQL jsonb re-sorts every
+    // object key by key length first, then bytewise, and the replay path
+    // (CollectionSettlement::snapshot) rebuilds the value objects from that
+    // normalized payload, which re-emits every key order except the rates
+    // map deterministically.
+    $jsonbNormalize = static function (array $value) use (&$jsonbNormalize): array {
+        uksort($value, static fn (string $a, string $b): int => [strlen($a), $a] <=> [strlen($b), $b]);
+
+        return array_map(
+            static fn (mixed $item): mixed => is_array($item) ? $jsonbNormalize($item) : $item,
+            $value,
+        );
+    };
+    $stored = $jsonbNormalize($definition->toArray());
+    assert(is_string($stored['source']));
     $roundTripped = new PricingSnapshot(new PriceDefinition(
-        new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
+        new ModelIdentity($stored['identity']['provider'], $stored['identity']['model']),
         array_map(
             static fn (array $rate): Rate => new Rate($rate['unit'], $rate['amount'], $rate['per'], $rate['currency']),
-            $reordered['rates'],
+            $stored['rates'],
         ),
-        PricingSource::ProviderNative,
+        PricingSource::from($stored['source']),
     ));
 
     expect($roundTripped->fingerprint)->toBe($snapshot->fingerprint);
+});
+
+it('reproduces legacy fingerprints for snapshots persisted before jsonb canonicalization', function (): void {
+    // A pre-change snapshot of a definition whose rates map was already in
+    // jsonb key order was fingerprinted over the plain toArray encoding.
+    // Canonicalizing only the rates map keeps that fingerprint byte-identical
+    // so already-persisted settlements still validate on replay.
+    $definition = new PriceDefinition(
+        new ModelIdentity('anthropic', 'claude-3-5-haiku-latest'),
+        [
+            'input_tokens' => new Rate('input_tokens', '0.8', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '4', '1000000'),
+        ],
+        PricingSource::ProviderNative,
+    );
+
+    $legacyEncoded = json_encode($definition->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+    assert(is_string($legacyEncoded));
+    $legacyFingerprint = hash('sha256', $legacyEncoded);
+
+    expect((new PricingSnapshot($definition))->fingerprint)->toBe($legacyFingerprint);
+});
+
+it('normalizes the rates map using jsonb key ordering rather than plain bytewise ordering', function (): void {
+    // Bytewise sorting places cache_write_input_tokens before
+    // cached_input_tokens ('_' < 'd'); jsonb orders by key length first and
+    // does the opposite. The fingerprint must follow jsonb.
+    $identity = ['provider' => 'openrouter', 'model' => 'openai/gpt-5.6-terra-272k'];
+    $rate = static fn (string $unit, string $amount): array => [
+        'unit' => $unit, 'amount' => $amount, 'per' => '1000000', 'currency' => 'USD',
+    ];
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
+        [
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '5', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.4', '1000000'),
+        ],
+        PricingSource::ProviderNative,
+    );
+
+    $encode = static function (array $rates) use ($identity): string {
+        return json_encode([
+            'identity' => $identity,
+            'rates' => $rates,
+            'source' => 'provider_native',
+            'currency' => 'USD',
+            'effective_at' => null,
+            'retrieved_at' => null,
+            'source_reference' => null,
+        ], JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+    };
+    $jsonbOrdered = $encode([
+        'cached_input_tokens' => $rate('cached_input_tokens', '0.4'),
+        'cache_write_input_tokens' => $rate('cache_write_input_tokens', '5'),
+    ]);
+    $bytewiseOrdered = $encode([
+        'cache_write_input_tokens' => $rate('cache_write_input_tokens', '5'),
+        'cached_input_tokens' => $rate('cached_input_tokens', '0.4'),
+    ]);
+    $fingerprint = (new PricingSnapshot($definition))->fingerprint;
+
+    expect($fingerprint)->toBe(hash('sha256', $jsonbOrdered))
+        ->not->toBe(hash('sha256', $bytewiseOrdered));
 });
