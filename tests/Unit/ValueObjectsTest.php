@@ -10,6 +10,7 @@ use Jkudish\LaravelAiPricing\Enums\RoundingBoundary;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\Money;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
+use Jkudish\LaravelAiPricing\ValueObjects\PricingSnapshot;
 use Jkudish\LaravelAiPricing\ValueObjects\Rate;
 use Jkudish\LaravelAiPricing\ValueObjects\Usage;
 
@@ -75,4 +76,45 @@ it('rejects invalid money usage and rate values', function (): void {
         ->and(fn () => (new Money('1'))->rounded(-1))->toThrow(InvalidArgumentException::class, 'Money scale cannot be negative.')
         ->and(fn () => new Usage(['tokens' => -1]))->toThrow(InvalidArgumentException::class)
         ->and(fn () => new Rate('tokens', 1, 0))->toThrow(InvalidArgumentException::class);
+});
+
+it('keeps pricing fingerprints stable across a jsonb key-order round trip', function (): void {
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
+        [
+            'input_tokens' => new Rate('input_tokens', '4', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '18', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.4', '1000000'),
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '5', '1000000'),
+            'exa_search_requests' => new Rate('exa_search_requests', '0.007', '1'),
+        ],
+        PricingSource::ProviderNative,
+    );
+    $snapshot = new PricingSnapshot($definition);
+
+    // PostgreSQL jsonb normalizes object key order; decode with ksort on every
+    // nested object to model that storage round trip before re-fingerprinting.
+    $encoded = json_encode($snapshot->toArray()['definition'], JSON_THROW_ON_ERROR);
+    assert(is_string($encoded));
+    $decoded = json_decode($encoded, true, flags: JSON_THROW_ON_ERROR);
+    assert(is_array($decoded));
+    $reordered = json_decode(json_encode($decoded, JSON_THROW_ON_ERROR | JSON_FORCE_OBJECT), true, flags: JSON_THROW_ON_ERROR);
+    assert(is_array($reordered));
+    ksort($reordered);
+    foreach ($reordered as $key => $value) {
+        if (is_array($value)) {
+            ksort($value);
+            $reordered[$key] = $value;
+        }
+    }
+    $roundTripped = new PricingSnapshot(new PriceDefinition(
+        new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
+        array_map(
+            static fn (array $rate): Rate => new Rate($rate['unit'], $rate['amount'], $rate['per'], $rate['currency']),
+            $reordered['rates'],
+        ),
+        PricingSource::ProviderNative,
+    ));
+
+    expect($roundTripped->fingerprint)->toBe($snapshot->fingerprint);
 });
