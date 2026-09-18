@@ -183,3 +183,206 @@ it('normalizes the rates map using jsonb key ordering rather than plain bytewise
     expect($fingerprint)->toBe(hash('sha256', $jsonbOrdered))
         ->not->toBe(hash('sha256', $bytewiseOrdered));
 });
+
+it('rehydrates persisted snapshots with their stored identity and verifying algorithm', function (): void {
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
+        [
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '5', '1000000'),
+            'exa_search_requests' => new Rate('exa_search_requests', '0.007', '1'),
+            'output_tokens' => new Rate('output_tokens', '18', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.4', '1000000'),
+            'input_tokens' => new Rate('input_tokens', '4', '1000000'),
+        ],
+        PricingSource::ProviderNative,
+    );
+    $snapshot = new PricingSnapshot($definition);
+
+    $rehydrated = PricingSnapshot::fromPersisted($snapshot->toArray(), $definition);
+
+    expect($rehydrated->fingerprint)->toBe($snapshot->fingerprint)
+        ->and($rehydrated->algorithm)->toBe(PricingSnapshot::ALGORITHM_RATES_JSONB_V1)
+        ->and($rehydrated->toArray())->toBe($snapshot->toArray());
+});
+
+it('replays recursive-ksort era fingerprints through a jsonb storage round trip', function (): void {
+    // The first wave-internal revision fingerprinted the whole definition
+    // under recursive ksort. Rates stored out of ksort order — as jsonb
+    // stores exa_search_requests before cache_write_input_tokens — must
+    // still verify, because that algorithm is content-addressed and
+    // independent of storage order. The rehydrated snapshot keeps the
+    // stored fingerprint instead of adopting the current one.
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
+        [
+            'input_tokens' => new Rate('input_tokens', '4', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '18', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.4', '1000000'),
+            'exa_search_requests' => new Rate('exa_search_requests', '0.007', '1'),
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '5', '1000000'),
+        ],
+        PricingSource::ProviderNative,
+    );
+
+    $recursiveKsort = static function (array $value) use (&$recursiveKsort): array {
+        ksort($value);
+
+        return array_map(
+            static fn (mixed $item): mixed => is_array($item) ? $recursiveKsort($item) : $item,
+            $value,
+        );
+    };
+    $legacyEncoded = json_encode($recursiveKsort($definition->toArray()), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+    assert(is_string($legacyEncoded));
+    $storedFingerprint = hash('sha256', $legacyEncoded);
+
+    // Rebuild the definition the way a jsonb replay does: every object key
+    // in jsonb order, which differs from the insertion order above.
+    $jsonbNormalize = static function (array $value) use (&$jsonbNormalize): array {
+        uksort($value, static fn (string $a, string $b): int => [strlen($a), $a] <=> [strlen($b), $b]);
+
+        return array_map(
+            static fn (mixed $item): mixed => is_array($item) ? $jsonbNormalize($item) : $item,
+            $value,
+        );
+    };
+    $stored = $jsonbNormalize($definition->toArray());
+    assert(is_string($stored['source']));
+    $rebuilt = new PriceDefinition(
+        new ModelIdentity($stored['identity']['provider'], $stored['identity']['model']),
+        array_map(
+            static fn (array $rate): Rate => new Rate($rate['unit'], $rate['amount'], $rate['per'], $rate['currency']),
+            $stored['rates'],
+        ),
+        PricingSource::from($stored['source']),
+    );
+
+    $rehydrated = PricingSnapshot::fromPersisted(['fingerprint' => $storedFingerprint, 'definition' => $stored], $rebuilt);
+
+    expect($rehydrated->fingerprint)->toBe($storedFingerprint)
+        ->and($rehydrated->fingerprint)->not->toBe((new PricingSnapshot($rebuilt))->fingerprint)
+        ->and($rehydrated->algorithm)->toBe(PricingSnapshot::ALGORITHM_RECURSIVE_KSORT_V0);
+});
+
+it('replays plain-era fingerprints for definitions written in jsonb key order', function (): void {
+    // The plain-era writer fingerprinted its in-memory definition directly.
+    // When the catalog's insertion order was already jsonb key order, the
+    // jsonb storage round trip preserves that encoding byte-for-byte and
+    // the stored fingerprint still verifies, rehydrating as the plain
+    // algorithm with its stored identity.
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
+        [
+            'input_tokens' => new Rate('input_tokens', '4', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '18', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.4', '1000000'),
+            'exa_search_requests' => new Rate('exa_search_requests', '0.007', '1'),
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '5', '1000000'),
+        ],
+        PricingSource::ProviderNative,
+    );
+    $plainEncoded = json_encode($definition->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+    assert(is_string($plainEncoded));
+    $storedFingerprint = hash('sha256', $plainEncoded);
+
+    // The reader rebuilds from jsonb, which keeps this rates order intact.
+    $jsonbNormalize = static function (array $value) use (&$jsonbNormalize): array {
+        uksort($value, static fn (string $a, string $b): int => [strlen($a), $a] <=> [strlen($b), $b]);
+
+        return array_map(
+            static fn (mixed $item): mixed => is_array($item) ? $jsonbNormalize($item) : $item,
+            $value,
+        );
+    };
+    $stored = $jsonbNormalize($definition->toArray());
+    assert(is_string($stored['source']));
+    $rebuilt = new PriceDefinition(
+        new ModelIdentity($stored['identity']['provider'], $stored['identity']['model']),
+        array_map(
+            static fn (array $rate): Rate => new Rate($rate['unit'], $rate['amount'], $rate['per'], $rate['currency']),
+            $stored['rates'],
+        ),
+        PricingSource::from($stored['source']),
+    );
+
+    $rehydrated = PricingSnapshot::fromPersisted(['fingerprint' => $storedFingerprint, 'definition' => $stored], $rebuilt);
+
+    // For a definition already written in jsonb key order, the plain and
+    // current encodings are byte-identical, so the probe order reports the
+    // current label while preserving the stored fingerprint exactly: the
+    // snapshot verifies either way and no identity is recomputed.
+    expect($rehydrated->fingerprint)->toBe($storedFingerprint)
+        ->and($rehydrated->algorithm)->toBe(PricingSnapshot::ALGORITHM_RATES_JSONB_V1)
+        ->and((new PricingSnapshot($rebuilt))->fingerprint)->toBe($storedFingerprint);
+});
+
+it('fails closed when plain-era rates were written out of jsonb key order', function (): void {
+    // A plain-era definition whose rates were inserted out of jsonb order
+    // fingerprinted that insertion order. jsonb storage destroys it, so the
+    // stored fingerprint no longer matches any recomputable encoding and
+    // replay rejects rather than forgiving: this is the documented
+    // compatibility boundary of the plain algorithm, not a pass.
+    $written = new PriceDefinition(
+        new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
+        [
+            'input_tokens' => new Rate('input_tokens', '4', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '18', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.4', '1000000'),
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '5', '1000000'),
+            'exa_search_requests' => new Rate('exa_search_requests', '0.007', '1'),
+        ],
+        PricingSource::ProviderNative,
+    );
+    $plainEncoded = json_encode($written->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+    assert(is_string($plainEncoded));
+    $storedFingerprint = hash('sha256', $plainEncoded);
+
+    $jsonbNormalize = static function (array $value) use (&$jsonbNormalize): array {
+        uksort($value, static fn (string $a, string $b): int => [strlen($a), $a] <=> [strlen($b), $b]);
+
+        return array_map(
+            static fn (mixed $item): mixed => is_array($item) ? $jsonbNormalize($item) : $item,
+            $value,
+        );
+    };
+    $stored = $jsonbNormalize($written->toArray());
+    assert(is_string($stored['source']));
+    $rebuilt = new PriceDefinition(
+        new ModelIdentity($stored['identity']['provider'], $stored['identity']['model']),
+        array_map(
+            static fn (array $rate): Rate => new Rate($rate['unit'], $rate['amount'], $rate['per'], $rate['currency']),
+            $stored['rates'],
+        ),
+        PricingSource::from($stored['source']),
+    );
+
+    PricingSnapshot::fromPersisted(['fingerprint' => $storedFingerprint, 'definition' => $stored], $rebuilt);
+})->throws(InvalidArgumentException::class);
+
+it('fails closed on tampered, unknown, and mismatched persisted identities', function (string $kind): void {
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k'),
+        [
+            'input_tokens' => new Rate('input_tokens', '4', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '18', '1000000'),
+            'exa_search_requests' => new Rate('exa_search_requests', '0.007', '1'),
+        ],
+        PricingSource::ProviderNative,
+    );
+    $snapshot = new PricingSnapshot($definition);
+
+    $value = match ($kind) {
+        'tampered fingerprint' => ['fingerprint' => str_repeat('0', 64), 'definition' => $definition->toArray()],
+        'unknown declared algorithm' => ['fingerprint' => $snapshot->fingerprint, 'algorithm' => 'sha256:future@9', 'definition' => $definition->toArray()],
+        'declared algorithm does not verify' => ['fingerprint' => hash('sha256', 'not-the-snapshot'), 'algorithm' => PricingSnapshot::ALGORITHM_RATES_JSONB_V1, 'definition' => $definition->toArray()],
+        'missing fingerprint' => ['definition' => $definition->toArray()],
+        default => throw new LogicException("Unknown identity fixture [{$kind}]."),
+    };
+
+    PricingSnapshot::fromPersisted($value, $definition);
+})->with([
+    'tampered fingerprint',
+    'unknown declared algorithm',
+    'declared algorithm does not verify',
+    'missing fingerprint',
+])->throws(InvalidArgumentException::class);
