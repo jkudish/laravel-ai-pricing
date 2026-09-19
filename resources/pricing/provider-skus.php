@@ -8,13 +8,14 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 5,
-    'retrieved_at' => '2026-09-17T00:00:00+00:00',
+    'version' => 6,
+    'retrieved_at' => '2026-09-18T00:00:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
         'anthropic:claude-sonnet-5',
         'anthropic:claude-sonnet-5-us',
+        'openrouter:openai/gpt-5.6-terra-272k',
         'you:research-frontier',
         'searchapi:search',
         'tavily:search',
@@ -116,6 +117,17 @@ return [
             'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
             'rates' => [
                 'uncached_queries' => ['amount' => '15', 'per' => '1000'],
+            ],
+        ],
+        'openrouter:openai/gpt-5.6-terra-272k' => [
+            'source' => 'https://openrouter.ai/api/v1/models/openai/gpt-5.6-terra-20260709/endpoints',
+            'notes' => 'Checked 2026-09-18. Verified against the dated canonical endpoints catalog, the server-tool web-search guide (https://openrouter.ai/docs/guides/features/server-tools/web-search), and the prompt-caching guide (https://openrouter.ai/docs/guides/best-practices/prompt-caching). Synthetic worst-case billing basis for the bounded openai/gpt-5.6-terra grounded route: every completion billed at the >=272,000-prompt long-context override rates of the default-tier OpenAI endpoints (routing tag "openai"; provider order "openai" excludes opt-in service tiers such as openai/flex and openai/fast, which are the only other OpenAI-tagged endpoints today). The generic openrouter:openai/gpt-5.6-terra identity stays unpriced here so aggregate model rates never satisfy this basis. exa_search_requests is the Exa engine fee (auto mode, USD 0.007 per request, up to 10 results included) and is deliberately distinct from the native web_search passthrough: this identity intentionally declares no web_searches rate. Cache-write (1.25x) and cache-read multipliers apply to the applicable long-context input rate; the catalog override values already compound them (cache write 5/M = 1.25 x 4/M input). The model catalog publishes no separate internal_reasoning rate, so reasoning is billed as completion tokens and no reasoning rate is declared. Snapshot invalidation: any catalog change to these endpoints (rates, override thresholds, the default-tier OpenAI endpoint set), any new OpenAI default-tier endpoint with higher rates, or any Exa engine fee change invalidates this entry and requires re-review per .agents/skills/fetching-provider-pricing; a fresh catalog read is mandatory before refresh.',
+            'rates' => [
+                'input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '18', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.4', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'exa_search_requests' => ['amount' => '0.007', 'per' => '1'],
             ],
         ],
         'you:answer' => [
