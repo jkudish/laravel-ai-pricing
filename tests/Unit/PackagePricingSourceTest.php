@@ -31,7 +31,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-18')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-23')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -122,6 +122,54 @@ it('quotes the OpenRouter bounded basis exactly and keeps generic or native-sear
         ->and(packagePricingSource()->allowsFallback($identity))->toBeFalse();
 });
 
+it('quotes the Luna max canary using its own long-context basis without repricing Terra', function (): void {
+    $identity = new ModelIdentity('openrouter', 'openai/gpt-6-luna-272k');
+    $definition = packagePricingSource()->find($identity);
+    $usage = new Usage([
+        'cache_write_input_tokens' => 6_300_000,
+        'output_tokens' => 768_000,
+        'exa_search_requests' => 5,
+    ]);
+    $quote = (new CostCalculator)->calculate($usage, $definition);
+    $terra = (new CostCalculator)->calculate(
+        $usage,
+        packagePricingSource()->find(new ModelIdentity('openrouter', 'openai/gpt-5.6-terra-272k')),
+    );
+
+    // 6.3M cache writes x $0.25/M + 0.768M output x $0.75/M + 5 x $0.007.
+    expect((string) $quote->cost?->amount)->toBe('2.186')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->provenance?->reference)->toBe('https://openrouter.ai/api/v1/models/openai/gpt-6-luna-20260922/endpoints')
+        ->and((string) $terra->cost?->amount)->toBe('45.359')
+        ->and(packagePricingSource()->allowsFallback($identity))->toBeFalse()
+        ->and(packagePricingSource()->find(new ModelIdentity('openrouter', 'openai/gpt-6-luna')))->toBeNull()
+        ->and(packagePricingSource()->find(new ModelIdentity('openrouter', 'openai/gpt-6-luna-pro-272k')))->toBeNull();
+});
+
+it('prices exclusive Luna token partitions and refuses to invent separate reasoning or native search fees', function (): void {
+    $definition = packagePricingSource()->find(new ModelIdentity('openrouter', 'openai/gpt-6-luna-272k'));
+    $usage = [
+        'input_tokens' => 2_000_000,
+        'cached_input_tokens' => 3_000_000,
+        'cache_write_input_tokens' => 1_000_000,
+        'output_tokens' => 4_000_000,
+        'exa_search_requests' => 2,
+    ];
+    $complete = (new CostCalculator)->calculate(new Usage($usage), $definition);
+    $partial = (new CostCalculator)->calculate(new Usage([
+        ...$usage,
+        'reasoning_tokens' => 17,
+        'web_searches' => 1,
+    ]), $definition);
+
+    // $0.4 uncached + $0.06 cache read + $0.25 cache write + $3 output + $0.014 Exa.
+    expect((string) $complete->cost?->amount)->toBe('3.724')
+        ->and($complete->completeness)->toBe(CostCompleteness::Complete)
+        ->and((string) $partial->cost?->amount)->toBe('3.724')
+        ->and($partial->completeness)->toBe(CostCompleteness::Partial)
+        ->and($partial->missingUnits)->toEqualCanonicalizing(['reasoning_tokens', 'web_searches']);
+});
+
 it('does not apply the global Claude rate to generic or US-only identities', function (string $sku): void {
     expect(packagePricingSource()->find(new ModelIdentity('anthropic', $sku)))->toBeNull()
         ->and(packagePricingSource()->allowsFallback(new ModelIdentity('anthropic', $sku)))->toBeFalse();
@@ -168,13 +216,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-18T00:00:00+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-23T00:10:40+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-18T00:00:00+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-23T00:10:40+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -194,8 +242,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(6)
-        ->and($snapshot['retrieved_at'])->toBe('2026-09-18T00:00:00+00:00')
+    expect($snapshot['version'])->toBe(7)
+        ->and($snapshot['retrieved_at'])->toBe('2026-09-23T00:10:40+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -214,7 +262,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10|17|18)\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10|17|18|23)\./');
     }
 });
 
