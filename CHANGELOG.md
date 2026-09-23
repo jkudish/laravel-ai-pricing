@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Reviewed `openrouter:openai/gpt-6-luna-272k` conservative pricing basis for default-tier OpenAI token/cache usage and Exa auto search. Existing Terra rates are unchanged.
+
 ## [0.1.2] - 2026-09-15
 
 ### Added

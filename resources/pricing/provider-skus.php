@@ -8,14 +8,15 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 6,
-    'retrieved_at' => '2026-09-18T00:00:00+00:00',
+    'version' => 7,
+    'retrieved_at' => '2026-09-23T00:10:40+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
         'anthropic:claude-sonnet-5',
         'anthropic:claude-sonnet-5-us',
         'openrouter:openai/gpt-5.6-terra-272k',
+        'openrouter:openai/gpt-6-luna-272k',
         'you:research-frontier',
         'searchapi:search',
         'tavily:search',
@@ -127,6 +128,17 @@ return [
                 'output_tokens' => ['amount' => '18', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.4', 'per' => '1000000'],
                 'cache_write_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'exa_search_requests' => ['amount' => '0.007', 'per' => '1'],
+            ],
+        ],
+        'openrouter:openai/gpt-6-luna-272k' => [
+            'source' => 'https://openrouter.ai/api/v1/models/openai/gpt-6-luna-20260922/endpoints',
+            'notes' => 'Checked 2026-09-23. Synthetic worst-case billing basis for regular GPT-6 Luna, not Luna Pro, using the dated canonical endpoints catalog and Exa pricing from https://openrouter.ai/docs/guides/features/server-tools/web-search. Restricted to default-tier OpenAI routing tag "openai", excluding flex, fast and other providers. Every completion uses the >=272,000-prompt override rates: input $0.2/M, output $0.75/M, cache read $0.02/M and cache write $0.25/M. Input partitions are exclusive; cache-write already includes the 1.25x premium and dominates the reservation. These conservative rates are not an assertion that a short request is billed at the long-context tier. Reasoning, including effort max, is part of completion usage; no additional reasoning unit is priced. exa_search_requests covers only Exa auto at $0.007/request with up to ten results, not the native web_search fee or other search modes. Generic and Pro identities are not aliases for this basis. Snapshot invalidation: changes to the canonical revision, default-tier endpoint set, context threshold, token/cache rates or Exa fee require fresh official-source review before use; this snapshot is not an upstream spend cap.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.2', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.02', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '0.25', 'per' => '1000000'],
                 'exa_search_requests' => ['amount' => '0.007', 'per' => '1'],
             ],
         ],
