@@ -59,6 +59,24 @@ it('labels a quote unavailable when no used unit has a rate', function (): void 
         ->and($quote->cost)->toBeNull();
 });
 
+it('reports only the output unit missing when neither output-family rate is published', function (): void {
+    // The output family settles as one partition, so with neither an output
+    // nor a reasoning rate the billable quantity is the output count, which
+    // subsumes its reasoning subset: reasoning never appears as its own
+    // missing unit on top of the output one.
+    $pricing = new PriceDefinition(
+        new ModelIdentity('openai', 'gpt'),
+        ['input_tokens' => new Rate('input_tokens', '1', '1000000')],
+        PricingSource::Configured,
+    );
+
+    $quote = (new CostCalculator)->calculate(new Usage(['output_tokens' => 20, 'reasoning_tokens' => 5]), $pricing);
+
+    expect($quote->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($quote->missingUnits)->toBe(['output_tokens'])
+        ->and($quote->cost)->toBeNull();
+});
+
 it('rejects mixed currencies when constructing a price definition', function (): void {
     expect(fn () => new PriceDefinition(
         new ModelIdentity('provider', 'model'),

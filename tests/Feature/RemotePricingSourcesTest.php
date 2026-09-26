@@ -137,6 +137,41 @@ it('maps a non-zero internal_reasoning price to a reasoning rate and skips a zer
         ->and((string) $zeroed?->rates['output_tokens']->amount)->toBe('0.000008');
 });
 
+it('excludes a model whose internal_reasoning amount is unusable from the catalog', function (string $amount): void {
+    Http::fake([
+        'https://openrouter.test/api/v1/models' => Http::response([
+            'data' => [
+                [
+                    'id' => 'openai/gpt-broken',
+                    'pricing' => [
+                        'prompt' => '0.000001',
+                        'completion' => '0.000008',
+                        'internal_reasoning' => $amount,
+                    ],
+                ],
+                [
+                    'id' => 'openai/gpt-test',
+                    'pricing' => [
+                        'prompt' => '0.000001',
+                        'completion' => '0.000008',
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    $source = openRouterSource();
+
+    // An empty or negative amount is a broken catalog entry, not a zero
+    // price. The zero-skip check no longer parses the raw amount itself, so
+    // the wrapped UnexpectedValueException — not brick's NumberFormatException
+    // — reaches usableModels' per-model guard and the entry is skipped the
+    // same way as any other malformed price: the model fails closed as
+    // missing pricing rather than being quoted or crashing the retrieval.
+    expect($source->find(new ModelIdentity('openrouter', 'openai/gpt-broken')))->toBeNull()
+        ->and((string) $source->find(new ModelIdentity('openrouter', 'openai/gpt-test'))?->rates['output_tokens']->amount)->toBe('0.000008');
+})->with([[''], ['-1']]);
+
 it('does not apply OpenRouter pricing to models invoked through another provider', function (): void {
     Http::fake([
         'https://openrouter.test/api/v1/models' => Http::response([

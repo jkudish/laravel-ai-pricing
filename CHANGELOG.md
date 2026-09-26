@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - laravel/ai 0.x Gemini and xAI observations report the output count exclusive of reasoning (the 1.0 SDK folds reasoning into the output total itself). The adapter now folds reasoning into the output count for those drivers by default so their reasoning bills at the output rate instead of silently under-billing. The fold never applies to the 1.0 dialect. Pass `reasoning_token_semantic: 'inclusive'` to keep such a payload unfolded, and note that a `Usage` object constructed directly must carry reasoning-inclusive `output_tokens`.
 - Raw Bedrock Converse usage (camelCase `inputTokens`, which excludes cached and cache-written tokens) is now read as the laravel/ai 1.0 inclusive dialect and bills `input − cached − cache_write` as uncached input. Pass `input_token_semantic: 'exclusive'` for raw payloads whose input count is already cache-exclusive.
 - Raw Anthropic `cache_creation_input_tokens` (and its camelCase spelling) now bills as `cache_write_input_tokens`; previously the field was dropped for raw payloads and cache-written input was never billed.
+- Driver validation now also applies to laravel/ai 1.0-dialect payloads: an empty or non-string `driver` value throws an `InvalidArgumentException` instead of being silently ignored when no driver heuristic was needed.
 
 ## [0.1.2] - 2026-09-15
 

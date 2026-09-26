@@ -923,6 +923,55 @@ it('folds reasoning into the output count for laravel/ai 0.x gemini and xai driv
         ->and($quote->missingUnits)->toBe([]);
 })->with([['gemini'], ['xai']]);
 
+it('keeps an explicit inclusive semantic unfolded for a 0.x exclusive driver', function (): void {
+    // The gemini driver folds by default because its 0.x dialect reports the
+    // completion count exclusive of reasoning. A caller that knows better —
+    // for example a payload whose counts already include reasoning — can say
+    // so, and the explicit semantic must beat the driver default.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'gemini',
+        'model' => 'reasoning-test',
+        'reasoning_token_semantic' => 'inclusive',
+        'usage' => [
+            'promptTokens' => 10,
+            'completionTokens' => 15,
+            'reasoningTokens' => 5,
+        ],
+    ]);
+
+    expect($observation->usage->toArray())->toEqual([
+        'input_tokens' => '10',
+        'output_tokens' => '15',
+        'cached_input_tokens' => '0',
+        'cache_write_input_tokens' => '0',
+        'reasoning_tokens' => '5',
+    ]);
+});
+
+it('folds the serialized 0.x usage form the 0.11.2 SDK emits', function (): void {
+    // laravel/ai 0.11.2's Usage::toArray() serializes to the snake_case
+    // spellings, so a persisted or forwarded observation carries
+    // prompt_tokens/completion_tokens/reasoning_tokens. The xAI driver kept
+    // reasoning outside the completion count, so that form folds too.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'xai',
+        'model' => 'reasoning-test',
+        'usage' => [
+            'prompt_tokens' => 10,
+            'completion_tokens' => 15,
+            'reasoning_tokens' => 5,
+        ],
+    ]);
+
+    expect($observation->usage->toArray())->toEqual([
+        'input_tokens' => '10',
+        'output_tokens' => '20',
+        'cached_input_tokens' => '0',
+        'cache_write_input_tokens' => '0',
+        'reasoning_tokens' => '5',
+    ]);
+});
+
 it('does not fold reasoning again for laravel/ai 1.0 gemini usage', function (): void {
     // The 1.0 SDK already folds thought tokens into the output total, so the
     // 1.0 dialect never folds regardless of driver.
