@@ -585,7 +585,15 @@ it('maps laravel/ai 1.0 usage totals without double billing cached input tokens'
         $expected['reasoning_tokens'] = '5';
     }
 
-    expect((new LaravelAiObservationAdapter)->adapt($value)->usage->toArray())->toMatchArray($expected);
+    $units = (new LaravelAiObservationAdapter)->adapt($value)->usage->toArray();
+
+    expect($units)->toMatchArray($expected);
+
+    if ($nullCache) {
+        // A serialized null reasoning count disappears entirely rather than
+        // surviving as a zero unit.
+        expect($units)->not->toHaveKey('reasoning_tokens');
+    }
 })->with([
     '1.0 object usage' => [true, false],
     '1.0 array usage' => [false, false],
@@ -872,6 +880,187 @@ it('rejects an invalid reasoning token semantic', function (): void {
             'outputTokens' => 20,
         ],
     ]))->toThrow(InvalidArgumentException::class, 'must be either [inclusive] or [exclusive]');
+});
+
+it('folds reasoning into the output count for laravel/ai 0.x gemini and xai drivers by default', function (string $provider): void {
+    // The laravel/ai 0.x Gemini and xAI drivers kept the thought or reasoning
+    // count outside the completion count, so the adapter folds it back in.
+    // Without the fold the partition would silently under-bill: the payload
+    // would look like 15 inclusive output tokens when the true total is 20.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => $provider,
+        'model' => 'reasoning-test',
+        'usage' => [
+            'promptTokens' => 10,
+            'completionTokens' => 15,
+            'reasoningTokens' => 5,
+        ],
+    ]);
+
+    expect($observation->usage->toArray())->toEqual([
+        'input_tokens' => '10',
+        'output_tokens' => '20',
+        'cached_input_tokens' => '0',
+        'cache_write_input_tokens' => '0',
+        'reasoning_tokens' => '5',
+    ]);
+
+    // Hand-computed with an input rate of $1/M, an output rate of $10/M, and
+    // no reasoning rate: 10 * 1/1M + 20 * 10/1M = 0.00001 + 0.0002 = 0.00021.
+    // The unfolded reading bills 15 * 10/1M, a 25% output under-bill.
+    $definition = new PriceDefinition(
+        new ModelIdentity($provider, 'reasoning-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '1', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '10', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+
+    $quote = (new CostCalculator)->calculate($observation->usage, $definition);
+
+    expect((string) $quote->cost?->amount)->toBe('0.00021')
+        ->and($quote->missingUnits)->toBe([]);
+})->with([['gemini'], ['xai']]);
+
+it('does not fold reasoning again for laravel/ai 1.0 gemini usage', function (): void {
+    // The 1.0 SDK already folds thought tokens into the output total, so the
+    // 1.0 dialect never folds regardless of driver.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'gemini',
+        'model' => 'reasoning-test',
+        'usage' => [
+            'inputTokens' => 10,
+            'outputTokens' => 15,
+            'reasoningTokens' => 5,
+        ],
+    ]);
+
+    expect($observation->usage->toArray())->toEqual([
+        'input_tokens' => '10',
+        'output_tokens' => '15',
+        'cached_input_tokens' => '0',
+        'cache_write_input_tokens' => '0',
+        'reasoning_tokens' => '5',
+    ]);
+});
+
+it('resolves the exclusive fold with the same aliases and order as normalization', function (array $usage): void {
+    // Numeric strings and mixed spellings must fold exactly like integer
+    // camelCase payloads: the fold reads the value normalization would choose
+    // (alias order output_tokens, completion_tokens, outputTokens,
+    // completionTokens) and rewrites it canonically as output_tokens.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'reasoning-test',
+        'reasoning_token_semantic' => 'exclusive',
+        'usage' => $usage,
+    ]);
+
+    expect($observation->usage->toArray())->toMatchArray([
+        'output_tokens' => '20',
+        'reasoning_tokens' => '5',
+    ]);
+
+    // Hand-computed: input 10 * 1/1M + 15 * 2/1M + 5 * 3/1M = 0.000055. A fold
+    // that silently skipped these spellings would partition an unfolded 15
+    // into 10 + 5 and bill the same total here, but a payload whose reasoning
+    // rides outside the output count would lose 5 * output rate.
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'reasoning-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '1', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '2', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '3', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+
+    $cost = (new CostCalculator)->calculate($observation->usage, $definition)->cost;
+
+    expect((string) $cost?->amount)->toBe('0.000055');
+})->with([
+    'snake_case numeric strings' => [['input_tokens' => 10, 'output_tokens' => '15', 'reasoning_tokens' => '5']],
+    'mixed camel and snake aliases' => [['promptTokens' => 10, 'outputTokens' => '15', 'completionTokens' => 9, 'reasoningOutputTokens' => '5']],
+]);
+
+it('refuses to fold exclusive reasoning without a reported output count', function (): void {
+    expect(fn () => (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'reasoning-test',
+        'reasoning_token_semantic' => 'exclusive',
+        'usage' => ['input_tokens' => 10, 'reasoning_tokens' => 5],
+    ]))->toThrow(InvalidArgumentException::class, 'require a reported output token count');
+});
+
+it('keeps the legacy dialect when a payload mixes old and new usage keys', function (string $provider, string $expectedOutput): void {
+    // A payload that reports both spellings speaks the 0.x dialect: the prompt
+    // key wins for input, the outputTokens alias wins for output (matching
+    // normalization's alias order, not the completion spelling), and the gemini
+    // driver default folds reasoning into that same resolved output count.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => $provider,
+        'model' => 'reasoning-test',
+        'usage' => [
+            'promptTokens' => 100,
+            'inputTokens' => 80,
+            'completionTokens' => 20,
+            'outputTokens' => 25,
+            'reasoningTokens' => 5,
+        ],
+    ]);
+
+    expect($observation->usage->toArray())->toMatchArray([
+        'input_tokens' => '100',
+        'output_tokens' => $expectedOutput,
+        'reasoning_tokens' => '5',
+    ]);
+})->with([
+    'inclusive driver keeps the reported output count' => ['openrouter', '25'],
+    'gemini folds reasoning into the resolved output count' => ['gemini', '30'],
+]);
+
+it('validates an explicit driver even when the dialect needs no driver heuristic', function (): void {
+    expect(fn () => (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openai',
+        'model' => 'driver-test',
+        'driver' => 123,
+        'usage' => ['inputTokens' => 10, 'outputTokens' => 20],
+    ]))->toThrow(InvalidArgumentException::class, 'provider driver must be a non-empty string');
+});
+
+it('stands reasoning in as the output total when it exceeds the reported output count without a reasoning rate', function (): void {
+    // No reasoning rate is published, so the output-family total is the larger
+    // of the two counts: max(3, 5) * 2/1M = 0.00001.
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'reasoning-test'),
+        ['output_tokens' => new Rate('output_tokens', '2', '1000000')],
+        PricingSource::Configured,
+    );
+
+    $quote = (new CostCalculator)->calculate(new Usage(['output_tokens' => 3, 'reasoning_tokens' => 5]), $definition);
+
+    expect((string) $quote->cost?->amount)->toBe('0.00001')
+        ->and($quote->missingUnits)->toBe([]);
+});
+
+it('prices a reasoning-only payload at its own rate when one is published', function (): void {
+    // No output count is reported, so the partition remainder clamps to zero
+    // and the 7 reasoning tokens bill exactly once at their own rate:
+    // max(0, 0 - 7) * 2/1M + 7 * 3/1M = 0.000021.
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'reasoning-test'),
+        [
+            'output_tokens' => new Rate('output_tokens', '2', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '3', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+
+    $quote = (new CostCalculator)->calculate(new Usage(['reasoning_tokens' => 7]), $definition);
+
+    expect((string) $quote->cost?->amount)->toBe('0.000021')
+        ->and($quote->missingUnits)->toBe([]);
 });
 
 it('lets an explicit input token semantic override the laravel/ai 1.0 dialect', function (): void {

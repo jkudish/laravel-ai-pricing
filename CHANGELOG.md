@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Reviewed `openrouter:openai/gpt-6-luna-272k` conservative pricing basis for default-tier OpenAI token/cache usage and Exa auto search. Existing Terra rates are unchanged.
+- Optional `reasoning_token_semantic` (`inclusive`, the default, or `exclusive`) on laravel/ai observations, which folds a reasoning count that sits outside the reported output count into it before pricing.
+
+### Changed
+
+- Reasoning tokens now bill exactly once, as a partition of the output count that every provider reports inclusive of its reasoning subset: `(output − reasoning) × output rate + reasoning × reasoning rate` when a `reasoning_tokens` rate is published, and the whole inclusive output count at the output rate when none is. Previously every unit with a rate billed additively, so any catalog with a reasoning rate (including OpenRouter's `internal_reasoning` mapping) double-billed reasoning. Migration: a published `reasoning_tokens` rate of `0` now means reasoning is free; under the old additive semantics `0` was a common way to spell "no extra charge", and such catalogs must remove the rate or their reasoning bills at $0. A zero OpenRouter `internal_reasoning` price is no longer mapped to a rate at all. Raw `reasoning_tokens` usage with no published rate no longer marks a quote partial.
+- laravel/ai 0.x Gemini and xAI observations report the output count exclusive of reasoning (the 1.0 SDK folds reasoning into the output total itself). The adapter now folds reasoning into the output count for those drivers by default so their reasoning bills at the output rate instead of silently under-billing. The fold never applies to the 1.0 dialect. Pass `reasoning_token_semantic: 'inclusive'` to keep such a payload unfolded, and note that a `Usage` object constructed directly must carry reasoning-inclusive `output_tokens`.
+- Raw Bedrock Converse usage (camelCase `inputTokens`, which excludes cached and cache-written tokens) is now read as the laravel/ai 1.0 inclusive dialect and bills `input − cached − cache_write` as uncached input. Pass `input_token_semantic: 'exclusive'` for raw payloads whose input count is already cache-exclusive.
+- Raw Anthropic `cache_creation_input_tokens` (and its camelCase spelling) now bills as `cache_write_input_tokens`; previously the field was dropped for raw payloads and cache-written input was never billed.
 
 ## [0.1.2] - 2026-09-15
 

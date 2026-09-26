@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Jkudish\LaravelAiPricing\Adapters;
 
+use Brick\Math\BigDecimal;
 use InvalidArgumentException;
 use Jkudish\LaravelAiPricing\ValueObjects\PricingObservation;
 use Override;
@@ -11,6 +12,12 @@ use Override;
 final class LaravelAiObservationAdapter implements ObservationAdapter
 {
     private const array INCLUSIVE_DRIVERS = ['openrouter', 'groq', 'openai-compatible', 'deepseek', 'mistral'];
+
+    private const array EXCLUSIVE_REASONING_DRIVERS = ['gemini', 'xai'];
+
+    private const array OUTPUT_ALIASES = ['output_tokens', 'completion_tokens', 'outputTokens', 'completionTokens'];
+
+    private const array REASONING_ALIASES = ['reasoning_tokens', 'reasoning_output_tokens', 'reasoningTokens', 'reasoningOutputTokens'];
 
     /** @param array<string, string> $providerDrivers */
     public function __construct(
@@ -63,7 +70,7 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
         $usage = is_object($data['usage']) ? get_object_vars($data['usage']) : $data['usage'];
 
         if (is_array($usage)) {
-            $usage = $this->foldExclusiveReasoningTokens($data, $usage);
+            $usage = $this->foldExclusiveReasoningTokens($data, $usage, $provider);
             $data['usage'] = $usage;
             $inclusive = $this->usesInclusivePromptTokens($data, $provider, $this->reportsInclusiveInputTokens($usage));
             $prompt = $usage['promptTokens'] ?? $usage['inputTokens'] ?? $usage['prompt_tokens'] ?? $usage['input_tokens'] ?? 0;
@@ -96,51 +103,131 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
     /**
      * Fold an exclusive reasoning count into the reported output count.
      *
-     * Every dialect this adapter accepts reports the output count inclusive of
-     * its reasoning subset, which is the semantics the cost calculator assumes
-     * when it prices the output token family as a partition. Callers that know
-     * their payload better (for example a raw payload whose output count
-     * excludes reasoning) can pass [reasoning_token_semantic] or
-     * [reasoningTokenSemantic] as [exclusive]; the reasoning count is then
-     * added to whichever output alias the payload reports before
-     * normalization, so reasoning is still priced exactly once. Any other
-     * value is rejected the same way the input token semantic is.
+     * Most dialects this adapter accepts report the output count inclusive of
+     * its reasoning subset — OpenAI, Anthropic and OpenRouter in both the
+     * laravel/ai 0.x and 1.0 dialects — which is the semantics the cost
+     * calculator assumes when it prices the output token family as a
+     * partition. Two 0.x dialects report it exclusive instead: the laravel/ai
+     * 0.x Gemini and xAI drivers kept the thought or reasoning count outside
+     * the completion count, so for those drivers the fold applies by default.
+     * The 1.0 dialect never folds, because its outputTokens already includes
+     * reasoning. Callers that know their payload better can pass
+     * [reasoning_token_semantic] or [reasoningTokenSemantic] as [inclusive] or
+     * [exclusive] to override either default.
      *
      * @param  array<string, mixed>  $data
      * @param  array<mixed, mixed>  $usage
      * @return array<mixed, mixed>
      */
-    private function foldExclusiveReasoningTokens(array $data, array $usage): array
+    private function foldExclusiveReasoningTokens(array $data, array $usage, mixed $provider): array
+    {
+        if (! $this->foldsExclusiveReasoning($data, $usage, $provider)) {
+            return $usage;
+        }
+
+        $reasoning = $this->numericUsageEntry($usage, self::REASONING_ALIASES);
+        $output = $this->numericUsageEntry($usage, self::OUTPUT_ALIASES);
+
+        if ($reasoning === null || ! BigDecimal::of($reasoning[1])->isPositive()) {
+            return $usage;
+        }
+
+        if ($output === null) {
+            throw new InvalidArgumentException('Laravel AI exclusive reasoning tokens require a reported output token count.');
+        }
+
+        $total = BigDecimal::of($output[1])->plus(BigDecimal::of($reasoning[1]));
+
+        unset(
+            $usage['output_tokens'],
+            $usage['completion_tokens'],
+            $usage['outputTokens'],
+            $usage['completionTokens'],
+        );
+
+        $usage['output_tokens'] = (string) $total;
+
+        return $usage;
+    }
+
+    /**
+     * Resolve whether the payload's reasoning count sits outside its output count.
+     *
+     * Precedence:
+     * 1. An explicit [inclusive] or [exclusive] reasoning token semantic, for
+     *    callers that know their payload better than any driver default.
+     * 2. The laravel/ai 0.x dialect produced by the Gemini and xAI drivers,
+     *    whose completion count excluded the reasoning count. The 1.0 dialect
+     *    renamed the keys and folds reasoning into the output total itself,
+     *    so it never folds here regardless of driver.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<mixed, mixed>  $usage
+     */
+    private function foldsExclusiveReasoning(array $data, array $usage, mixed $provider): bool
     {
         $semantic = $data['reasoningTokenSemantic'] ?? $data['reasoning_token_semantic'] ?? null;
 
-        if ($semantic === null) {
-            return $usage;
+        if ($semantic !== null) {
+            if (! is_string($semantic) || ! in_array(strtolower($semantic), ['inclusive', 'exclusive'], true)) {
+                throw new InvalidArgumentException('Laravel AI reasoning token semantic must be either [inclusive] or [exclusive].');
+            }
+
+            return strtolower($semantic) === 'exclusive';
         }
 
-        if (! is_string($semantic) || ! in_array(strtolower($semantic), ['inclusive', 'exclusive'], true)) {
-            throw new InvalidArgumentException('Laravel AI reasoning token semantic must be either [inclusive] or [exclusive].');
+        if (! $this->speaksLegacyOutputDialect($usage)) {
+            return false;
         }
 
-        if (strtolower($semantic) !== 'exclusive') {
-            return $usage;
-        }
+        $driver = $this->resolvedDriver($data, $provider);
+        $usageProvider = is_string($driver) ? $driver : $provider;
 
-        $reasoning = $usage['reasoningTokens'] ?? $usage['reasoning_tokens'] ?? $usage['reasoningOutputTokens'] ?? $usage['reasoning_output_tokens'] ?? 0;
+        return is_string($usageProvider) && in_array(strtolower($usageProvider), self::EXCLUSIVE_REASONING_DRIVERS, true);
+    }
 
-        if (! is_int($reasoning) || $reasoning <= 0) {
-            return $usage;
-        }
-
-        foreach (['outputTokens', 'output_tokens', 'completionTokens', 'completion_tokens'] as $key) {
-            if (array_key_exists($key, $usage) && is_int($usage[$key])) {
-                $usage[$key] += $reasoning;
-
-                return $usage;
+    /**
+     * Determine whether the usage payload speaks a legacy output dialect.
+     *
+     * The laravel/ai 0.x dialect reports prompt or completion keys; the 1.0
+     * dialect renamed them to input and output keys, so the exclusive-reasoning
+     * driver default can only ever apply to the legacy spellings.
+     *
+     * @param  array<mixed, mixed>  $usage
+     */
+    private function speaksLegacyOutputDialect(array $usage): bool
+    {
+        foreach (['promptTokens', 'prompt_tokens', 'completionTokens', 'completion_tokens'] as $key) {
+            if (array_key_exists($key, $usage)) {
+                return true;
             }
         }
 
-        return $usage;
+        return false;
+    }
+
+    /**
+     * Find the first usage entry the normalized adapter would accept.
+     *
+     * The alias order and the integer-or-numeric-string predicate mirror
+     * NormalizedObservationAdapter exactly, so the fold reads the same value
+     * the normalization would have chosen and rewrites it canonically.
+     *
+     * @param  array<mixed, mixed>  $usage
+     * @param  list<string>  $keys
+     * @return array{0: string, 1: int|string}|null
+     */
+    private function numericUsageEntry(array $usage, array $keys): ?array
+    {
+        foreach ($keys as $key) {
+            $value = $usage[$key] ?? null;
+
+            if (is_int($value) || (is_string($value) && is_numeric($value))) {
+                return [$key, $value];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -169,10 +256,29 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             return strtolower($semantic) === 'inclusive';
         }
 
+        $driver = $this->resolvedDriver($data, $provider);
+
         if ($inclusiveDialect) {
             return true;
         }
 
+        $usageProvider = is_string($driver) ? $driver : $provider;
+
+        return is_string($usageProvider) && in_array(strtolower($usageProvider), self::INCLUSIVE_DRIVERS, true);
+    }
+
+    /**
+     * Resolve the driver name that produced the observation.
+     *
+     * An explicitly provided driver must be a non-empty string — the check
+     * runs before any dialect shortcut so a malformed driver never slips
+     * through unvalidated — and an omitted driver falls back to the configured
+     * provider-to-driver mapping before the provider name itself.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function resolvedDriver(array $data, mixed $provider): mixed
+    {
         $driver = $data['driver'] ?? $data['provider_driver'] ?? $data['providerDriver'] ?? null;
 
         if ($driver !== null && (! is_string($driver) || trim($driver) === '')) {
@@ -183,9 +289,7 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             $driver = $this->mappedDriver($provider);
         }
 
-        $usageProvider = is_string($driver) ? $driver : $provider;
-
-        return is_string($usageProvider) && in_array(strtolower($usageProvider), self::INCLUSIVE_DRIVERS, true);
+        return $driver;
     }
 
     /**

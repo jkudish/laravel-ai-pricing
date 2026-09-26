@@ -136,9 +136,11 @@ final class CostCalculator
                 [$outputTotal, $outputRate, 'output_tokens'],
             ];
         } else {
+            // Neither family rate is published: the billable output-family
+            // quantity is the output count, which subsumes the reasoning
+            // subset, so reasoning never appears as its own missing unit.
             $segments = [
                 [$output, $outputRate, 'output_tokens'],
-                [$reasoning, $reasoningRate, 'reasoning_tokens'],
             ];
         }
 

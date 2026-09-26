@@ -97,6 +97,46 @@ it('ignores OpenRouter sentinel-priced router models without rejecting valid pri
         ->and($source->sync())->toBe(1);
 });
 
+it('maps a non-zero internal_reasoning price to a reasoning rate and skips a zero one', function (): void {
+    Http::fake([
+        'https://openrouter.test/api/v1/models' => Http::response([
+            'data' => [
+                [
+                    'id' => 'perplexity/sonar-deep-research',
+                    'pricing' => [
+                        'prompt' => '0.000001',
+                        'completion' => '0.000008',
+                        'internal_reasoning' => '0.000003',
+                    ],
+                ],
+                [
+                    'id' => 'openai/gpt-test',
+                    'pricing' => [
+                        'prompt' => '0.000001',
+                        'completion' => '0.000008',
+                        'internal_reasoning' => '0',
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    $source = openRouterSource();
+    $partitioned = $source->find(new ModelIdentity('openrouter', 'perplexity/sonar-deep-research'));
+    $zeroed = $source->find(new ModelIdentity('openrouter', 'openai/gpt-test'));
+
+    // A non-zero internal_reasoning price is the model's own rate for the
+    // reasoning subset, so it maps to reasoning_tokens and the calculator
+    // prices the output family as a partition. A zero internal_reasoning price
+    // means reasoning bills inside the completion price — not that reasoning
+    // is free — so it must not become a published zero reasoning_tokens rate,
+    // which the partition would honor as deliberately free reasoning.
+    expect((string) $partitioned?->rates['reasoning_tokens']->amount)->toBe('0.000003')
+        ->and($partitioned?->rates)->toHaveKeys(['output_tokens', 'reasoning_tokens'])
+        ->and($zeroed?->rates)->not->toHaveKey('reasoning_tokens')
+        ->and((string) $zeroed?->rates['output_tokens']->amount)->toBe('0.000008');
+});
+
 it('does not apply OpenRouter pricing to models invoked through another provider', function (): void {
     Http::fake([
         'https://openrouter.test/api/v1/models' => Http::response([

@@ -58,18 +58,18 @@ Most providers return token counts, not dollars. For those responses, Laravel AI
 
 ### Reasoning tokens
 
-OpenAI, Anthropic, Gemini, and OpenRouter all report the output (completion) token count inclusive of its reasoning or thinking subset, and bill reasoning as part of that count. The package prices the output family as a single partition, never as additive units:
+OpenAI, Anthropic, Gemini, and OpenRouter all bill reasoning as part of the output count. The package prices the output family as a single partition, never as additive units, and expects the reported `output_tokens` count to be inclusive of reasoning.
 
 A `reasoning_tokens` rate is the price for reasoning tokens and **replaces** the output rate for them:
 
 - omitting the rate means the output rate applies (the whole inclusive `output_tokens` count bills at the output rate, so an incomplete catalog can never bill reasoning twice);
 - `0` means reasoning is free — a deliberate claim, not "no extra charge".
 
-When a rate is published, the family prices as `(output_tokens - reasoning_tokens) x output rate + reasoning_tokens x reasoning rate`. No OpenRouter model publishes a zero `internal_reasoning` price today, but the catalog field can express it, and the mapping honors it.
+When a rate is published, the family prices as `(output_tokens - reasoning_tokens) x output rate + reasoning_tokens x reasoning rate`. A zero OpenRouter `internal_reasoning` price means the model bills reasoning inside its completion price, so it is not mapped to a rate at all and reasoning settles at the output rate.
 
 Catalogs written under the pre-0.2 additive semantics that used a `0` reasoning rate to mean "no extra charge" must **remove** that rate when upgrading, or their reasoning tokens will bill at $0.
 
-Payloads whose output count excludes reasoning can declare that with the same payload key the input semantic uses, and the adapter folds the reasoning count into the output count before pricing:
+One dialect reports the output count **exclusive** of reasoning: the laravel/ai 0.x Gemini and xAI drivers kept the thought or reasoning count outside the completion count (the 1.0 SDK folds it into the output total itself). The adapter folds those payloads by default. Payloads from any other source whose output count excludes reasoning can declare that with the same payload key the input semantic uses:
 
 ```php
 $cost = AiPricing::cost([
@@ -78,7 +78,7 @@ $cost = AiPricing::cost([
 ]);
 ```
 
-Omitting the semantic keeps the provider default, `inclusive`.
+Omitting the semantic bills the payload as inclusive unless it is a 0.x Gemini or xAI observation. A `Usage` object constructed directly must carry reasoning-inclusive `output_tokens`; adjust the count yourself before constructing it if your source reports reasoning separately.
 
 ## Price catalogs
 

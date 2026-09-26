@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Jkudish\LaravelAiPricing\Sources;
 
+use Brick\Math\BigDecimal;
 use DateTimeImmutable;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
@@ -167,6 +168,16 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource
 
             if (! is_string($amount) && ! is_int($amount)) {
                 throw new UnexpectedValueException("OpenRouter pricing field [{$field}] must be an integer or decimal string.");
+            }
+
+            // A zero internal_reasoning price means the model bills reasoning
+            // inside its completion price, not that reasoning is free. The
+            // calculator's output-family partition treats a published
+            // reasoning_tokens rate of zero as deliberately free reasoning, so
+            // a zero here must not become a rate: skipping it leaves the
+            // reasoning subset billed at the output rate.
+            if ($field === 'internal_reasoning' && BigDecimal::of($amount)->isZero()) {
+                continue;
             }
 
             try {
