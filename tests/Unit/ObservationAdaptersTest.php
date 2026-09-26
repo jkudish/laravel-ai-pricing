@@ -12,6 +12,13 @@ use Jkudish\LaravelAiPricing\Adapters\GatewayObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\LaravelAiObservationAdapter;
 use Jkudish\LaravelAiPricing\Adapters\LaravelAiProviderCostExtractor;
 use Jkudish\LaravelAiPricing\Adapters\NormalizedObservationAdapter;
+use Jkudish\LaravelAiPricing\Contracts\PricingCatalog;
+use Jkudish\LaravelAiPricing\CostCalculator;
+use Jkudish\LaravelAiPricing\Enums\PricingSource;
+use Jkudish\LaravelAiPricing\PricingResolver;
+use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
+use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
+use Jkudish\LaravelAiPricing\ValueObjects\Rate;
 
 it('normalizes common provider usage shapes without losing custom units', function (object $adapter): void {
     $observation = $adapter->adapt([
@@ -531,3 +538,187 @@ final class ProviderResponseFixture
         return $this->payload;
     }
 }
+
+it('maps laravel/ai 1.0 usage totals without double billing cached input tokens', function (bool $object, bool $nullCache): void {
+    $usage = [
+        'inputTokens' => 100,
+        'outputTokens' => 20,
+        'cacheReadInputTokens' => 30,
+        'cacheWriteInputTokens' => 10,
+        'reasoningTokens' => 5,
+    ];
+
+    $value = [
+        // The openai driver is not in the historical inclusive-prompt driver list; only
+        // the laravel/ai 1.0 dialect makes this input count a cache-inclusive total.
+        'provider' => 'openai',
+        'model' => 'gpt-test',
+        'usage' => $usage,
+    ];
+
+    if ($nullCache) {
+        // laravel/ai 1.0 serializes unreported cache and reasoning counts as nulls.
+        $value['usage'] = [
+            'input_tokens' => 100,
+            'output_tokens' => 20,
+            'cache_read_input_tokens' => 30,
+            'cache_write_input_tokens' => null,
+            'reasoning_tokens' => null,
+        ];
+    }
+
+    if ($object) {
+        $value['usage'] = (object) $value['usage'];
+        $value = (object) $value;
+    }
+
+    $expected = [
+        // inputTokens is a cache-inclusive total: 100 - 30 read - write (10 or 0 when null).
+        'input_tokens' => $nullCache ? '70' : '60',
+        'output_tokens' => '20',
+        'cached_input_tokens' => '30',
+        'cache_write_input_tokens' => $nullCache ? '0' : '10',
+    ];
+
+    if (! $nullCache) {
+        $expected['reasoning_tokens'] = '5';
+    }
+
+    expect((new LaravelAiObservationAdapter)->adapt($value)->usage->toArray())->toMatchArray($expected);
+})->with([
+    '1.0 object usage' => [true, false],
+    '1.0 array usage' => [false, false],
+    '1.0 serialized usage with null cache counts' => [false, true],
+]);
+
+it('bills laravel/ai 1.0 input totals once at each cache rate', function (bool $object): void {
+    $usage = [
+        'inputTokens' => 100,
+        'outputTokens' => 20,
+        'cacheReadInputTokens' => 30,
+        'cacheWriteInputTokens' => 10,
+        'reasoningTokens' => 5,
+    ];
+
+    $value = [
+        'provider' => 'openai',
+        'model' => 'gpt-test',
+        'usage' => $object ? (object) $usage : $usage,
+    ];
+
+    // Catalog rates mirror OpenAI GPT-5 mini class pricing: $0.60/M uncached input,
+    // $0.075/M cached input, $4.80/M output, and a $0/M cache write surcharge baseline.
+    // Expected cost, computed by hand from the 1.0 semantics (input includes cache):
+    //   uncached input  = 100 - 30 - 10 = 60 tokens -> 60 * 0.60   / 1M = 0.000036
+    //   cached input    = 30 tokens                   -> 30 * 0.075 / 1M = 0.00000225
+    //   cache write     = 10 tokens                   -> 10 * 0     / 1M = 0
+    //   output          = 20 tokens (includes reasoning)             -> 20 * 4.8 / 1M = 0.000096
+    //   reasoning       = 5 tokens (additive catalog unit)           -> 5  * 0    / 1M = 0
+    //   total           = 0.000036 + 0.00000225 + 0 + 0.000096 + 0 = 0.00013425
+    // The pre-fix exclusive interpretation would bill 100 uncached input tokens
+    // (0.00006) on top of the 30 cached and 10 written tokens: 0.00015825.
+    $definition = new PriceDefinition(
+        new ModelIdentity('openai', 'gpt-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '0.60', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.075', '1000000'),
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '0', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '4.8', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '0', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+    $catalog = new class($definition) implements PricingCatalog
+    {
+        public function __construct(private readonly PriceDefinition $definition) {}
+
+        public function find(ModelIdentity $identity): ?PriceDefinition
+        {
+            return $this->definition;
+        }
+
+        public function sync(): int
+        {
+            return 0;
+        }
+    };
+
+    $observation = (new LaravelAiObservationAdapter)->adapt($value);
+    $quote = (new PricingResolver($catalog, $catalog, $catalog))->resolve($observation);
+
+    expect((string) $quote->cost?->amount)->toBe('0.00013425')
+        ->and($quote->missingUnits)->toBe([]);
+})->with([
+    '1.0 object usage' => [true],
+    '1.0 array usage' => [false],
+]);
+
+it('keeps reasoning tokens an additive output unit under laravel/ai 1.0 semantics', function (): void {
+    // laravel/ai 1.0 reports outputTokens as a total that includes reasoning tokens,
+    // exactly as the 0.x completionTokens did for SDK-parsed responses, so the adapter
+    // keeps billing the full output total and exposes reasoning as its own additive
+    // unit for catalogs that price it separately. Consumers whose route bills
+    // reasoning within the output rate must keep normalizing it at their boundary.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'reasoning-test',
+        'usage' => [
+            'inputTokens' => 10,
+            'outputTokens' => 20,
+            'reasoningTokens' => 5,
+        ],
+    ]);
+
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'reasoning-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '1', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '2', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '3', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+
+    // Hand-computed: 10 * 1/1M + 20 * 2/1M + 5 * 3/1M = 0.00001 + 0.00004 + 0.000015.
+    $cost = (new CostCalculator)->calculate($observation->usage, $definition)->cost;
+
+    expect((string) $cost?->amount)->toBe('0.000065');
+});
+
+it('lets an explicit input token semantic override the laravel/ai 1.0 dialect', function (): void {
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'bedrock',
+        'model' => 'anthropic.test',
+        'input_token_semantic' => 'exclusive',
+        'usage' => [
+            'inputTokens' => 100,
+            'outputTokens' => 20,
+            'cacheReadInputTokens' => 30,
+            'cacheWriteInputTokens' => 10,
+        ],
+    ]);
+
+    expect($observation->usage->toArray()['input_tokens'])->toBe('100');
+});
+
+it('keeps raw Anthropic-shaped usage exclusive of cache tokens', function (): void {
+    // Provider-native Anthropic payloads report input_tokens that excludes cache
+    // reads and use the cache_creation_input_tokens spelling, so they must not be
+    // confused with the laravel/ai 1.0 serialized dialect.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'anthropic',
+        'model' => 'claude-test',
+        'usage' => [
+            'input_tokens' => 100,
+            'output_tokens' => 20,
+            'cache_read_input_tokens' => 30,
+            'cache_creation_input_tokens' => 10,
+        ],
+    ]);
+
+    expect($observation->usage->toArray())->toMatchArray([
+        'input_tokens' => '100',
+        'cached_input_tokens' => '30',
+        'cache_write_input_tokens' => '10',
+    ]);
+});
