@@ -609,17 +609,19 @@ it('bills laravel/ai 1.0 input totals once at each cache rate', function (bool $
 
     // Catalog rates mirror OpenAI GPT-5 mini class pricing: $0.60/M uncached input,
     // $0.075/M cached input, $4.80/M output, and a $0/M cache write surcharge baseline.
-    // Expected cost, computed by hand from the 1.0 semantics (input includes cache):
+    // Expected cost, computed by hand from the 1.0 semantics (input includes cache;
+    // output includes reasoning, and OpenAI bills reasoning as output tokens, so the
+    // OpenAI-mirroring catalog deliberately omits a reasoning_tokens rate and the
+    // whole inclusive output count settles at the output rate):
     //   uncached input  = 100 - 30 - 10 = 60 tokens -> 60 * 0.60   / 1M = 0.000036
     //   cached input    = 30 tokens                   -> 30 * 0.075 / 1M = 0.00000225
     //   cache write     = 10 tokens                   -> 10 * 0     / 1M = 0
-    //   output          = 20 - 5 reasoning = 15 tokens             -> 15 * 4.8 / 1M = 0.000072
-    //   reasoning       = 5 tokens, priced once at their own rate  -> 5  * 0    / 1M = 0
-    //   total           = 0.000036 + 0.00000225 + 0 + 0.000072 + 0 = 0.00011025
+    //   output          = 20 tokens (includes the 5 reasoning)    -> 20 * 4.8 / 1M = 0.000096
+    //   total           = 0.000036 + 0.00000225 + 0 + 0.000096 = 0.00013425
     // The pre-fix exclusive interpretation would bill 100 uncached input tokens
-    // (0.00006) on top of the 30 cached and 10 written tokens: 0.00015825, and
-    // the additive reasoning reading would re-bill the 5 reasoning tokens that
-    // the 20-token output count already contains: 0.00013425.
+    // (0.00006) on top of the 30 cached and 10 written tokens: 0.00015825. A
+    // reasoning_tokens rate of 0 would instead bill OpenAI reasoning for free,
+    // so catalogs that bill reasoning within the output rate must omit the rate.
     $definition = new PriceDefinition(
         new ModelIdentity('openai', 'gpt-test'),
         [
@@ -627,7 +629,6 @@ it('bills laravel/ai 1.0 input totals once at each cache rate', function (bool $
             'cached_input_tokens' => new Rate('cached_input_tokens', '0.075', '1000000'),
             'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '0', '1000000'),
             'output_tokens' => new Rate('output_tokens', '4.8', '1000000'),
-            'reasoning_tokens' => new Rate('reasoning_tokens', '0', '1000000'),
         ],
         PricingSource::Configured,
     );
@@ -649,7 +650,7 @@ it('bills laravel/ai 1.0 input totals once at each cache rate', function (bool $
     $observation = (new LaravelAiObservationAdapter)->adapt($value);
     $quote = (new PricingResolver($catalog, $catalog, $catalog))->resolve($observation);
 
-    expect((string) $quote->cost?->amount)->toBe('0.00011025')
+    expect((string) $quote->cost?->amount)->toBe('0.00013425')
         ->and($quote->missingUnits)->toBe([]);
 })->with([
     '1.0 object usage' => [true],
@@ -717,9 +718,12 @@ it('bills the reasoning subset exactly once across the output token family', fun
         [],
     ],
     // 10 * 1/1M + (20 - 5) * 4.8/1M + 5 * 0/1M = 0.00001 + 0.000072.
-    // A published zero rate is honored as catalog authority rather than
-    // falling back to the output rate; the inclusive 20 still do not bill.
-    'zero reasoning rate partitions and is honored' => [
+    // A published zero reasoning rate is a deliberate claim that reasoning is
+    // free and replaces the output rate for those tokens. Under the old
+    // additive semantics a zero rate was the natural way to spell "no extra
+    // charge" for reasoning billed within the output rate — such catalogs must
+    // drop the rate, or their reasoning now bills at $0.
+    'zero reasoning rate deliberately bills reasoning as free' => [
         [
             'input_tokens' => new Rate('input_tokens', '1', '1000000'),
             'output_tokens' => new Rate('output_tokens', '4.8', '1000000'),

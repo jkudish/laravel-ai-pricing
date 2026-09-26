@@ -60,8 +60,14 @@ Most providers return token counts, not dollars. For those responses, Laravel AI
 
 OpenAI, Anthropic, Gemini, and OpenRouter all report the output (completion) token count inclusive of its reasoning or thinking subset, and bill reasoning as part of that count. The package prices the output family as a single partition, never as additive units:
 
-- `(output_tokens - reasoning_tokens) x output rate + reasoning_tokens x reasoning rate` when the catalog publishes a `reasoning_tokens` rate (a published `0` rate is honored — OpenRouter uses it for models whose reasoning is free);
-- the whole inclusive `output_tokens` count at the output rate when no `reasoning_tokens` rate exists, so an incomplete catalog can never make reasoning free or bill it twice.
+A `reasoning_tokens` rate is the price for reasoning tokens and **replaces** the output rate for them:
+
+- omitting the rate means the output rate applies (the whole inclusive `output_tokens` count bills at the output rate, so an incomplete catalog can never bill reasoning twice);
+- `0` means reasoning is free — a deliberate claim, not "no extra charge".
+
+When a rate is published, the family prices as `(output_tokens - reasoning_tokens) x output rate + reasoning_tokens x reasoning rate`. No OpenRouter model publishes a zero `internal_reasoning` price today, but the catalog field can express it, and the mapping honors it.
+
+Catalogs written under the pre-0.2 additive semantics that used a `0` reasoning rate to mean "no extra charge" must **remove** that rate when upgrading, or their reasoning tokens will bill at $0.
 
 Payloads whose output count excludes reasoning can declare that with the same payload key the input semantic uses, and the adapter folds the reasoning count into the output count before pricing:
 

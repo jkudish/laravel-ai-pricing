@@ -93,6 +93,13 @@ final class CostCalculator
      * missing reasoning rate falls back to the output rate instead of
      * making reasoning free.
      *
+     * The meaning of a reasoning_tokens rate is therefore exact: it is the
+     * price for reasoning tokens and replaces the output rate for them. A
+     * published zero rate is a deliberate claim that reasoning is free; an
+     * omitted rate means the output rate applies. Catalogs that bill
+     * reasoning within the output rate must omit the rate rather than
+     * publish zero.
+     *
      * @return array{0: list<Money>, 1: list<string>}
      */
     private function settleOutputFamily(Usage $usage, PriceDefinition $pricing): array
