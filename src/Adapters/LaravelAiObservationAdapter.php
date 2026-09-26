@@ -63,6 +63,8 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
         $usage = is_object($data['usage']) ? get_object_vars($data['usage']) : $data['usage'];
 
         if (is_array($usage)) {
+            $usage = $this->foldExclusiveReasoningTokens($data, $usage);
+            $data['usage'] = $usage;
             $inclusive = $this->usesInclusivePromptTokens($data, $provider, $this->reportsInclusiveInputTokens($usage));
             $prompt = $usage['promptTokens'] ?? $usage['inputTokens'] ?? $usage['prompt_tokens'] ?? $usage['input_tokens'] ?? 0;
             $read = $usage['cacheReadInputTokens'] ?? $usage['cache_read_input_tokens'] ?? 0;
@@ -89,6 +91,56 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
         }
 
         return $this->normalized->adapt($this->record($data));
+    }
+
+    /**
+     * Fold an exclusive reasoning count into the reported output count.
+     *
+     * Every dialect this adapter accepts reports the output count inclusive of
+     * its reasoning subset, which is the semantics the cost calculator assumes
+     * when it prices the output token family as a partition. Callers that know
+     * their payload better (for example a raw payload whose output count
+     * excludes reasoning) can pass [reasoning_token_semantic] or
+     * [reasoningTokenSemantic] as [exclusive]; the reasoning count is then
+     * added to whichever output alias the payload reports before
+     * normalization, so reasoning is still priced exactly once. Any other
+     * value is rejected the same way the input token semantic is.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<mixed, mixed>  $usage
+     * @return array<mixed, mixed>
+     */
+    private function foldExclusiveReasoningTokens(array $data, array $usage): array
+    {
+        $semantic = $data['reasoningTokenSemantic'] ?? $data['reasoning_token_semantic'] ?? null;
+
+        if ($semantic === null) {
+            return $usage;
+        }
+
+        if (! is_string($semantic) || ! in_array(strtolower($semantic), ['inclusive', 'exclusive'], true)) {
+            throw new InvalidArgumentException('Laravel AI reasoning token semantic must be either [inclusive] or [exclusive].');
+        }
+
+        if (strtolower($semantic) !== 'exclusive') {
+            return $usage;
+        }
+
+        $reasoning = $usage['reasoningTokens'] ?? $usage['reasoning_tokens'] ?? $usage['reasoningOutputTokens'] ?? $usage['reasoning_output_tokens'] ?? 0;
+
+        if (! is_int($reasoning) || $reasoning <= 0) {
+            return $usage;
+        }
+
+        foreach (['outputTokens', 'output_tokens', 'completionTokens', 'completion_tokens'] as $key) {
+            if (array_key_exists($key, $usage) && is_int($usage[$key])) {
+                $usage[$key] += $reasoning;
+
+                return $usage;
+            }
+        }
+
+        return $usage;
     }
 
     /**

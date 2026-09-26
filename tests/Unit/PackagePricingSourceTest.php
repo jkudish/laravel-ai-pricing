@@ -114,8 +114,8 @@ it('quotes the OpenRouter bounded basis exactly and keeps generic or native-sear
 
     expect($nativeSearch->completeness)->toBe(CostCompleteness::Partial)
         ->and($nativeSearch->missingUnits)->toBe(['web_searches'])
-        ->and($reasoning->completeness)->toBe(CostCompleteness::Partial)
-        ->and($reasoning->missingUnits)->toBe(['reasoning_tokens'])
+        ->and($reasoning->completeness)->toBe(CostCompleteness::Complete)
+        ->and($reasoning->missingUnits)->toBe([])
         ->and((string) $cacheWrite->cost?->amount)->toBe('5.4')
         ->and($cacheWrite->completeness)->toBe(CostCompleteness::Complete)
         ->and(packagePricingSource()->find(new ModelIdentity('openrouter', 'openai/gpt-5.6-terra')))->toBeNull()
@@ -163,11 +163,14 @@ it('prices exclusive Luna token partitions and refuses to invent separate reason
     ]), $definition);
 
     // $0.4 uncached + $0.06 cache read + $0.25 cache write + $3 output + $0.014 Exa.
+    // The 17 reasoning tokens ride inside the inclusive 4M output count at the
+    // output rate because the Luna catalog publishes no separate reasoning rate,
+    // so they add no line and no missing unit of their own.
     expect((string) $complete->cost?->amount)->toBe('3.724')
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and((string) $partial->cost?->amount)->toBe('3.724')
         ->and($partial->completeness)->toBe(CostCompleteness::Partial)
-        ->and($partial->missingUnits)->toEqualCanonicalizing(['reasoning_tokens', 'web_searches']);
+        ->and($partial->missingUnits)->toBe(['web_searches']);
 });
 
 it('does not apply the global Claude rate to generic or US-only identities', function (string $sku): void {

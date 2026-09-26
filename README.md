@@ -56,6 +56,24 @@ A cost result is either provider-reported or calculated:
 
 Most providers return token counts, not dollars. For those responses, Laravel AI Pricing calculates an amount from the token usage and a price list. That calculated result is useful for application accounting, budgets, and reporting. It is not a replacement for a provider invoice.
 
+### Reasoning tokens
+
+OpenAI, Anthropic, Gemini, and OpenRouter all report the output (completion) token count inclusive of its reasoning or thinking subset, and bill reasoning as part of that count. The package prices the output family as a single partition, never as additive units:
+
+- `(output_tokens - reasoning_tokens) x output rate + reasoning_tokens x reasoning rate` when the catalog publishes a `reasoning_tokens` rate (a published `0` rate is honored — OpenRouter uses it for models whose reasoning is free);
+- the whole inclusive `output_tokens` count at the output rate when no `reasoning_tokens` rate exists, so an incomplete catalog can never make reasoning free or bill it twice.
+
+Payloads whose output count excludes reasoning can declare that with the same payload key the input semantic uses, and the adapter folds the reasoning count into the output count before pricing:
+
+```php
+$cost = AiPricing::cost([
+    ...$response->toArray(),
+    'reasoning_token_semantic' => 'exclusive',
+]);
+```
+
+Omitting the semantic keeps the provider default, `inclusive`.
+
 ## Price catalogs
 
 A price catalog is a list of published rates for provider models. A rate says how much one unit costs, such as one million input tokens or one million output tokens.

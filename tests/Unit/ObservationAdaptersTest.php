@@ -19,6 +19,7 @@ use Jkudish\LaravelAiPricing\PricingResolver;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Jkudish\LaravelAiPricing\ValueObjects\Rate;
+use Jkudish\LaravelAiPricing\ValueObjects\Usage;
 
 it('normalizes common provider usage shapes without losing custom units', function (object $adapter): void {
     $observation = $adapter->adapt([
@@ -612,11 +613,13 @@ it('bills laravel/ai 1.0 input totals once at each cache rate', function (bool $
     //   uncached input  = 100 - 30 - 10 = 60 tokens -> 60 * 0.60   / 1M = 0.000036
     //   cached input    = 30 tokens                   -> 30 * 0.075 / 1M = 0.00000225
     //   cache write     = 10 tokens                   -> 10 * 0     / 1M = 0
-    //   output          = 20 tokens (includes reasoning)             -> 20 * 4.8 / 1M = 0.000096
-    //   reasoning       = 5 tokens (additive catalog unit)           -> 5  * 0    / 1M = 0
-    //   total           = 0.000036 + 0.00000225 + 0 + 0.000096 + 0 = 0.00013425
+    //   output          = 20 - 5 reasoning = 15 tokens             -> 15 * 4.8 / 1M = 0.000072
+    //   reasoning       = 5 tokens, priced once at their own rate  -> 5  * 0    / 1M = 0
+    //   total           = 0.000036 + 0.00000225 + 0 + 0.000072 + 0 = 0.00011025
     // The pre-fix exclusive interpretation would bill 100 uncached input tokens
-    // (0.00006) on top of the 30 cached and 10 written tokens: 0.00015825.
+    // (0.00006) on top of the 30 cached and 10 written tokens: 0.00015825, and
+    // the additive reasoning reading would re-bill the 5 reasoning tokens that
+    // the 20-token output count already contains: 0.00013425.
     $definition = new PriceDefinition(
         new ModelIdentity('openai', 'gpt-test'),
         [
@@ -646,19 +649,20 @@ it('bills laravel/ai 1.0 input totals once at each cache rate', function (bool $
     $observation = (new LaravelAiObservationAdapter)->adapt($value);
     $quote = (new PricingResolver($catalog, $catalog, $catalog))->resolve($observation);
 
-    expect((string) $quote->cost?->amount)->toBe('0.00013425')
+    expect((string) $quote->cost?->amount)->toBe('0.00011025')
         ->and($quote->missingUnits)->toBe([]);
 })->with([
     '1.0 object usage' => [true],
     '1.0 array usage' => [false],
 ]);
 
-it('keeps reasoning tokens an additive output unit under laravel/ai 1.0 semantics', function (): void {
+it('bills reasoning once as a partition of the inclusive output count', function (): void {
     // laravel/ai 1.0 reports outputTokens as a total that includes reasoning tokens,
-    // exactly as the 0.x completionTokens did for SDK-parsed responses, so the adapter
-    // keeps billing the full output total and exposes reasoning as its own additive
-    // unit for catalogs that price it separately. Consumers whose route bills
-    // reasoning within the output rate must keep normalizing it at their boundary.
+    // exactly as the 0.x completionTokens did for SDK-parsed responses, and OpenAI,
+    // Anthropic, Gemini and OpenRouter all bill reasoning as part of that inclusive
+    // count. The calculator therefore prices the family as a partition instead of
+    // additive units: (output - reasoning) at the output rate plus reasoning at the
+    // reasoning rate when the catalog publishes one.
     $observation = (new LaravelAiObservationAdapter)->adapt([
         'provider' => 'openrouter',
         'model' => 'reasoning-test',
@@ -679,10 +683,191 @@ it('keeps reasoning tokens an additive output unit under laravel/ai 1.0 semantic
         PricingSource::Configured,
     );
 
-    // Hand-computed: 10 * 1/1M + 20 * 2/1M + 5 * 3/1M = 0.00001 + 0.00004 + 0.000015.
+    // Hand-computed: 10 * 1/1M + (20 - 5) * 2/1M + 5 * 3/1M = 0.00001 + 0.00003 + 0.000015.
+    // The previous additive reading billed the inclusive 20 output tokens AND the
+    // 5 reasoning tokens they contain: 0.000065, charging the reasoning twice.
     $cost = (new CostCalculator)->calculate($observation->usage, $definition)->cost;
 
-    expect((string) $cost?->amount)->toBe('0.000065');
+    expect((string) $cost?->amount)->toBe('0.000055');
+});
+
+it('bills the reasoning subset exactly once across the output token family', function (array $rates, array $units, string $cost, array $missing): void {
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'reasoning-test'),
+        $rates,
+        PricingSource::Configured,
+    );
+
+    $quote = (new CostCalculator)->calculate(new Usage($units), $definition);
+
+    expect((string) $quote->cost?->amount)->toBe($cost)
+        ->and($quote->missingUnits)->toBe($missing);
+})->with([
+    // 10 * 1/1M + (20 - 5) * 2/1M + 5 * 3/1M = 0.00001 + 0.00003 + 0.000015.
+    // The additive reading re-bills the 5 reasoning tokens the output count
+    // already contains: 0.000065.
+    'non-zero reasoning rate partitions the inclusive output count' => [
+        [
+            'input_tokens' => new Rate('input_tokens', '1', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '2', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '3', '1000000'),
+        ],
+        ['input_tokens' => 10, 'output_tokens' => 20, 'reasoning_tokens' => 5],
+        '0.000055',
+        [],
+    ],
+    // 10 * 1/1M + (20 - 5) * 4.8/1M + 5 * 0/1M = 0.00001 + 0.000072.
+    // A published zero rate is honored as catalog authority rather than
+    // falling back to the output rate; the inclusive 20 still do not bill.
+    'zero reasoning rate partitions and is honored' => [
+        [
+            'input_tokens' => new Rate('input_tokens', '1', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '4.8', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '0', '1000000'),
+        ],
+        ['input_tokens' => 10, 'output_tokens' => 20, 'reasoning_tokens' => 5],
+        '0.000082',
+        [],
+    ],
+    // 10 * 1/1M + 20 * 2/1M = 0.00005. Without a reasoning rate the whole
+    // inclusive output count bills at the output rate and reasoning is not
+    // reported missing, so a catalog omission cannot make reasoning free.
+    // Before the fix this quote was Partial with missingUnits [reasoning_tokens].
+    'missing reasoning rate falls back to the output rate' => [
+        [
+            'input_tokens' => new Rate('input_tokens', '1', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '2', '1000000'),
+        ],
+        ['input_tokens' => 10, 'output_tokens' => 20, 'reasoning_tokens' => 5],
+        '0.00005',
+        [],
+    ],
+    // 10 * 1/1M + 20 * 2/1M = 0.00005. Without a reported reasoning count the
+    // output count bills whole, unchanged from before.
+    'payload without reported reasoning bills the whole output count' => [
+        [
+            'input_tokens' => new Rate('input_tokens', '1', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '2', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '3', '1000000'),
+        ],
+        ['input_tokens' => 10, 'output_tokens' => 20],
+        '0.00005',
+        [],
+    ],
+]);
+
+it('prices an unreported output count by standing reasoning in at the output rate', function (): void {
+    // A payload that reports only a reasoning count must not become unpriceable
+    // when the catalog has no reasoning rate: the reasoning count is the
+    // output-family total. 7 * 2/1M = 0.000014.
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'reasoning-test'),
+        ['output_tokens' => new Rate('output_tokens', '2', '1000000')],
+        PricingSource::Configured,
+    );
+
+    $quote = (new CostCalculator)->calculate(new Usage(['reasoning_tokens' => 7]), $definition);
+
+    expect((string) $quote->cost?->amount)->toBe('0.000014')
+        ->and($quote->missingUnits)->toBe([]);
+});
+
+it('caps the partition remainder at zero when reasoning exceeds the output count', function (): void {
+    // A payload whose reasoning count exceeds its output count cannot bill a
+    // negative remainder: max(0, 3 - 5) * 2/1M + 5 * 3/1M = 0.000015, where the
+    // additive reading would have billed 0.000021.
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'reasoning-test'),
+        [
+            'output_tokens' => new Rate('output_tokens', '2', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '3', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+
+    $quote = (new CostCalculator)->calculate(new Usage(['output_tokens' => 3, 'reasoning_tokens' => 5]), $definition);
+
+    expect((string) $quote->cost?->amount)->toBe('0.000015');
+});
+
+it('folds an explicit exclusive reasoning semantic into the reported output count', function (string $semanticKey): void {
+    // A payload whose output count excludes reasoning folds the reasoning count
+    // into whichever output alias it reports, so the calculator still prices a
+    // single inclusive partition: 10 * 1/1M + (20 - 5) * 2/1M + 5 * 3/1M = 0.000055.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'reasoning-test',
+        $semanticKey => 'exclusive',
+        'usage' => [
+            'inputTokens' => 10,
+            'outputTokens' => 15,
+            'reasoningTokens' => 5,
+        ],
+    ]);
+
+    expect($observation->usage->toArray())->toMatchArray([
+        'input_tokens' => '10',
+        'output_tokens' => '20',
+        'reasoning_tokens' => '5',
+    ]);
+
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'reasoning-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '1', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '2', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '3', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+
+    $cost = (new CostCalculator)->calculate($observation->usage, $definition)->cost;
+
+    expect((string) $cost?->amount)->toBe('0.000055');
+})->with([
+    ['reasoning_token_semantic'],
+    ['reasoningTokenSemantic'],
+]);
+
+it('keeps the inclusive reasoning semantic the default', function (): void {
+    // Without a semantic the reported output count is trusted as inclusive:
+    // 10 * 1/1M + (15 - 5) * 2/1M + 5 * 3/1M = 0.000045.
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'reasoning-test',
+        'reasoning_token_semantic' => 'inclusive',
+        'usage' => [
+            'inputTokens' => 10,
+            'outputTokens' => 15,
+            'reasoningTokens' => 5,
+        ],
+    ]);
+
+    $definition = new PriceDefinition(
+        new ModelIdentity('openrouter', 'reasoning-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '1', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '2', '1000000'),
+            'reasoning_tokens' => new Rate('reasoning_tokens', '3', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+
+    $cost = (new CostCalculator)->calculate($observation->usage, $definition)->cost;
+
+    expect((string) $cost?->amount)->toBe('0.000045');
+});
+
+it('rejects an invalid reasoning token semantic', function (): void {
+    expect(fn () => (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'reasoning-test',
+        'reasoning_token_semantic' => 'sometimes',
+        'usage' => [
+            'inputTokens' => 10,
+            'outputTokens' => 20,
+        ],
+    ]))->toThrow(InvalidArgumentException::class, 'must be either [inclusive] or [exclusive]');
 });
 
 it('lets an explicit input token semantic override the laravel/ai 1.0 dialect', function (): void {
