@@ -31,7 +31,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-23')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-26')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -55,6 +55,8 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'Parallel Research Pro' => ['parallel', 'research-pro', 'processor_requests', '100', '1000'],
     'Valyu Research Standard' => ['valyu', 'research-standard', 'research_requests', '0.5', '1'],
     'xAI Grok 4.6' => ['xai', 'grok-4.6', 'searches', '5', '1000'],
+    'xAI Grok 4.6 X Search posts' => ['xai', 'grok-4.6', 'x_search_posts', '5', '1000'],
+    'xAI Grok 4.6 X Search profiles' => ['xai', 'grok-4.6', 'x_search_profiles', '10', '1000'],
 ]);
 
 it('quotes Claude Sonnet 5 global routing exactly and leaves undeclared billed units missing', function (): void {
@@ -219,13 +221,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-23T00:10:40+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-26T18:50:00+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-23T00:10:40+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-26T18:50:00+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -245,8 +247,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(7)
-        ->and($snapshot['retrieved_at'])->toBe('2026-09-23T00:10:40+00:00')
+    expect($snapshot['version'])->toBe(8)
+        ->and($snapshot['retrieved_at'])->toBe('2026-09-26T18:50:00+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -265,7 +267,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10|17|18|23)\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10|17|18|23|26)\./');
     }
 });
 
@@ -372,4 +374,37 @@ it('keeps variable components partial and missing or zero usage unavailable', fu
         ->and($missing->completeness)->toBe(CostCompleteness::Unavailable)
         ->and($zero->cost)->toBeNull()
         ->and($zero->completeness)->toBe(CostCompleteness::Unavailable);
+});
+
+it('bills X Search per fetched post and profile after the 2026-09-21 xAI change', function (): void {
+    $xai = packagePricingSource()->find(new ModelIdentity('xai', 'grok-4.6'));
+
+    $mixed = (new CostCalculator)->calculate(
+        new Usage([
+            'input_tokens' => 250_000,
+            'output_tokens' => 1_000,
+            'searches' => 4,
+            'x_search_posts' => 3_000,
+            'x_search_profiles' => 500,
+        ]),
+        $xai,
+    );
+
+    // Hand-computed: 4 x 5/1000 = 0.02 web search calls, 3_000 x 5/1000 = 15
+    // fetched posts, 500 x 10/1000 = 5 fetched profiles; 0.02 + 15 + 5 = 20.02.
+    // The token counts stay unpriced because grok-4.6 has context tiers.
+    expect((string) $mixed->cost?->amount)->toBe('20.02')
+        ->and($mixed->completeness)->toBe(CostCompleteness::Partial)
+        ->and($mixed->missingUnits)->toBe(['input_tokens', 'output_tokens'])
+        ->and((string) $mixed->provenance?->reference)->toBe('https://docs.x.ai/developers/pricing');
+
+    $toolsOnly = (new CostCalculator)->calculate(
+        new Usage(['x_search_posts' => 1_000, 'x_search_profiles' => 250]),
+        $xai,
+    );
+
+    // 1_000 x 5/1000 = 5 posts plus 250 x 10/1000 = 2.5 profiles = 7.5.
+    expect((string) $toolsOnly->cost?->amount)->toBe('7.5')
+        ->and($toolsOnly->completeness)->toBe(CostCompleteness::Complete)
+        ->and($toolsOnly->missingUnits)->toBe([]);
 });
