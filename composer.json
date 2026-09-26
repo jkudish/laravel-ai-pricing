@@ -78,9 +78,6 @@
         }
     },
     "extra": {
-        "branch-alias": {
-          "dev-feature/grounded-bounds-integration": "0.1.x-dev"
-        },
         "laravel": {
             "providers": [
                 "Jkudish\\LaravelAiPricing\\LaravelAiPricingServiceProvider"

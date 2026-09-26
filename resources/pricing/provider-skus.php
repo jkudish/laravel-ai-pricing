@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 7,
-    'retrieved_at' => '2026-09-23T00:10:40+00:00',
+    'version' => 8,
+    'retrieved_at' => '2026-09-26T18:50:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -247,9 +247,11 @@ return [
         ],
         'xai:grok-4.6' => [
             'source' => 'https://docs.x.ai/developers/pricing',
-            'notes' => 'Checked 2026-09-10. Current Web Search and X Search tool-call rate only. Token rates are omitted because grok-4.6 has context-length tiers that this snapshot cannot select safely. X Search pricing is scheduled to change on 2026-09-21.',
+            'notes' => 'Checked 2026-09-26. Web Search bills $5 per 1k calls (searches). X Search bills per item fetched since the 2026-09-21 change: every post returned by a search or thread fetch, including parent and quoted posts, counts toward x_search_posts at $5 per 1k, and every profile returned by a user search counts toward x_search_profiles at $10 per 1k. Map usage.server_side_tool_usage_details web_search_calls to searches, x_posts_fetched to x_search_posts, and x_users_fetched to x_search_profiles; never map x_search_calls onto the per-item units. Token rates are omitted because grok-4.6 has a context-length tier once a prompt reaches 200k tokens plus a 1.1x US regional multiplier that this snapshot cannot select safely.',
             'rates' => [
                 'searches' => ['amount' => '5', 'per' => '1000'],
+                'x_search_posts' => ['amount' => '5', 'per' => '1000'],
+                'x_search_profiles' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
     ],

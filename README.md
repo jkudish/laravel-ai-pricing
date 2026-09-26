@@ -125,7 +125,7 @@ The snapshot-level `retrieved_at` records when the package snapshot was assemble
 | `parallel` | `turbo` | `requests`, `additional_results` |
 | `parallel` | `research-pro` | `processor_requests` |
 | `valyu` | `research-standard` | `research_requests`, `screenshot_urls`, `code_executions`, `additional_deliverables` |
-| `xai` | `grok-4.6` | `searches` |
+| `xai` | `grok-4.6` | `searches`, `x_search_posts`, `x_search_profiles` |
 
 The Exa request rate includes up to ten results; pass only results above ten as `additional_results`. Pass `uncached_queries: 0` for a free cached Kagi response. You.com Frontier Research has negotiated usage and is intentionally unavailable.
 
@@ -143,7 +143,7 @@ The PHP v2 parity profiles use these pricing identities and dispositions:
 | `serpbase/news` | `serpbase:news` | Configured-only: use the account's actual price per credit, not a public headline minimum. |
 | `exa/research` | `exa:research` | Built-in Auto-effort ACU and search rates; fixed efforts and enrichment require their applicable rates. |
 | `gemini-deep/research` | `gemini:deep-research` | Unavailable: model, intermediate token, and tool quantities are provider-controlled. |
-| `grok-x-only/x`, `grok-combined/combined` | `xai:grok-4.6` | Built-in current search-tool rate only; context-tiered model tokens remain partial or unavailable. |
+| `grok-x-only/x`, `grok-combined/combined` | `xai:grok-4.6` | Built-in current Web Search and per-item X Search rates only; context-tiered model tokens remain partial or unavailable. |
 | `parallel/search` | `parallel:search` | Configured-only: the selectable mode and additional-result count determine the price. |
 | `parallel/turbo` | `parallel:turbo` | Built-in fixed Turbo request and additional-result rates. |
 | `parallel/research` (pro) | `parallel:research-pro` | Built-in fixed rate per successful pro processor run; other processors need distinct configured identities. |
@@ -159,7 +159,7 @@ These prices are estimates, not invoices. Provider-reported actual cost still wi
 
 Perplexity Agent presets route across models and tools, so the preset SKUs contain only stable tool rates. A quote with tool usage and unpriced routed-model units is partial; model-only usage is unavailable. Prefer the completed response's provider-reported `usage.cost.total_cost` whenever present. The package does not treat representative preset runs as fixed prices or maximums.
 
-Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 pricing changes above the context threshold; the current X Search billing model is also scheduled to change on September 21, 2026, so re-review this entry before any release on or after that date. Because the reviewed snapshot precedes the Portkey fallback, this partial xAI entry deliberately prevents incompatible flat fallback token rates from being applied to `grok-4.6`; token-only usage is unavailable, and search plus token usage is partial.
+Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 bills a higher tier once a prompt reaches 200,000 tokens (≥ 200k) and US regional requests bill at 1.1x. Its search-tool rates were re-reviewed against [docs.x.ai/developers/pricing](https://docs.x.ai/developers/pricing) on 2026-09-26: Web Search bills USD 5 per 1,000 calls (`searches`), while X Search has billed per item fetched since the 2026-09-21 change — USD 5 per 1,000 posts returned by a search or thread fetch, including parent and quoted posts (`x_search_posts`), and USD 10 per 1,000 profiles returned by a user search (`x_search_profiles`). Map the reported `usage.server_side_tool_usage_details` fields onto these units: `web_search_calls` to `searches`, `x_posts_fetched` to `x_search_posts`, and `x_users_fetched` to `x_search_profiles`. Never map the `x_search_calls` count onto the per-item units: it counts tool calls, not fetched items, and xAI no longer bills X Search per call. `searches` is preserved as the Web Search call unit, and its meaning has narrowed accordingly: callers that previously passed X Search calls as `searches` must migrate to `x_search_posts` and `x_search_profiles`, or their quotes no longer match xAI's per-item billing. Because the reviewed snapshot precedes the Portkey fallback, this partial xAI entry deliberately prevents incompatible flat fallback token rates from being applied to `grok-4.6`; token-only usage is unavailable, and search plus token usage is partial.
 
 SearchAPI charges successful searches at an account-plan-specific rate, so `searchapi:search` is unavailable by default. Configure the `successful_search_request` unit with your account rate before enforcing a budget. For example, if your account charges USD 4 per 1,000 successful requests:
 
@@ -236,7 +236,7 @@ Prices use a `provider:model` key. Use decimal strings for rates and divisors:
 ],
 ```
 
-Configured prices are used before remote catalogs. A configured identity replaces the snapshot definition; its units are not merged with built-in units. For example, an `xai:grok-4.6` override that still prices search tools must include `searches`. Provider-reported cost still takes precedence because it describes the completed request.
+Configured prices are used before remote catalogs. A configured identity replaces the snapshot definition; its units are not merged with built-in units. For example, an `xai:grok-4.6` override that still prices search tools must include every search unit it needs to bill — `searches`, `x_search_posts`, and `x_search_profiles` — because configuring only some of them leaves the rest unpriced. Provider-reported cost still takes precedence because it describes the completed request.
 
 ## Quoting a request before it runs
 
