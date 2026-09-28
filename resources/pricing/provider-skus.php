@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 8,
-    'retrieved_at' => '2026-09-26T18:50:00+00:00',
+    'version' => 9,
+    'retrieved_at' => '2026-09-28T03:42:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -28,6 +28,16 @@ return [
         'parallel:search',
         'valyu:search',
         'firecrawl:search',
+    ],
+    /*
+     * Provider-documented moving aliases that currently resolve to a reviewed
+     * versioned identity. The alias keeps its own public identity; only the
+     * rate lookup follows the target. Re-review whenever the provider moves an
+     * alias, because a completed response reports the versioned model it ran.
+     */
+    'aliases' => [
+        'typesafe:jev-latest' => 'typesafe:jev-1.13.0',
+        'typesafe:jev-preview' => 'typesafe:jev-1.13.0',
     ],
     'prices' => [
         'anthropic:claude-sonnet-5-global' => [
@@ -243,6 +253,14 @@ return [
                 'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
                 'code_executions' => ['amount' => '0.1', 'per' => '1'],
                 'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
+            ],
+        ],
+        'typesafe:jev-1.13.0' => [
+            'source' => 'https://docs.typesafe.ai/models',
+            'notes' => 'Checked 2026-09-28. Jev 1.13 System One classification over POST /v1/systemone: USD 42 per billion (0.042 per million) input tokens. TypeSafe documents output tokens as free, so output_tokens carries an explicit published zero rate rather than being omitted; responses still report a non-zero output count. No cache, reasoning, or per-request units are billed. The jev-latest and jev-preview aliases point to jev-1.13.0 per the same page and are mapped in aliases; a completed laravel/ai ClassificationResponse reports the resolved versioned model in meta->model. Any other version stays unpriced until reviewed.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.042', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0', 'per' => '1000000'],
             ],
         ],
         'xai:grok-4.6' => [

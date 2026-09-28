@@ -22,6 +22,7 @@ Use these primary-source starting points, then verify that the page still descri
 | SearchAPI | <https://www.searchapi.io/pricing> | Successful HTTP 200 searches and account-plan-specific rates |
 | Tavily Search | <https://www.tavily.com/pricing> | Account-plan USD per credit and Basic/Advanced credit usage |
 | Valyu Search and Research | <https://docs.valyu.ai/pricing> | Per-source search rates, research mode, optional tools, and provider-reported cost |
+| TypeSafe Jev | <https://docs.typesafe.ai/models> | Per-version input rate, free output, and which versioned ID each alias (`jev-latest`, `jev-preview`) points to |
 | xAI Grok tools | <https://docs.x.ai/developers/pricing> | Context-tiered model rates and separately changing Web/X Search tool rates |
 | Portkey | `https://configs.portkey.ai/pricing/{provider}.json` | Exact model-key match, cents encoding, aliases, and cache namespace |
 
