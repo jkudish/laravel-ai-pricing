@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-28
+
 ### Added
 
 - Reviewed `typesafe:jev-1.13.0` pricing (pricing snapshot v9): USD 0.042 per million input tokens from <https://docs.typesafe.ai/models> (checked 2026-09-28), with output tokens published as an explicit zero rate because TypeSafe documents them as free. `AiPricing::cost()` prices a laravel/ai 1.0 `ClassificationResponse` from its reported versioned model, and `AiPricing::quote()` prices `typesafe` usage before dispatch. Unreviewed Jev versions stay unavailable.
@@ -75,7 +77,8 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.0...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.1...main
+[0.2.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jkudish/laravel-ai-pricing/releases/tag/v0.1.1
