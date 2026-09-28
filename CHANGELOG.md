@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Reviewed `typesafe:jev-1.13.0` pricing (pricing snapshot v9): USD 0.042 per million input tokens from <https://docs.typesafe.ai/models> (checked 2026-09-28), with output tokens published as an explicit zero rate because TypeSafe documents them as free. `AiPricing::cost()` prices a laravel/ai 1.0 `ClassificationResponse` from its reported versioned model, and `AiPricing::quote()` prices `typesafe` usage before dispatch. Unreviewed Jev versions stay unavailable.
+- Source-local snapshot `aliases`: a documented moving alias borrows the rates and provenance of the versioned identity it points to while keeping its own requested identity. `typesafe:jev-latest` and `typesafe:jev-preview` map to `typesafe:jev-1.13.0`. An alias whose target is not priced resolves to unavailable.
+
 ## [0.2.0] - 2026-09-26
 
 This is a breaking release under 0.x semver: reasoning tokens now bill exactly once as a partition of the inclusive output count, a published `reasoning_tokens` rate of `0` means reasoning is free, and raw Bedrock usage is now read as the laravel/ai 1.0 inclusive dialect. Migration notes are inline below.

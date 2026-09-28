@@ -39,7 +39,7 @@ function price(ModelIdentity $identity, PricingSource $source, string $amount): 
 
 function packageFallbackPolicy(): PackagePricingSource
 {
-    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
+    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, aliases?: array<string, string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
     $snapshot = require __DIR__.'/../../resources/pricing/provider-skus.php';
 
     return new PackagePricingSource($snapshot);

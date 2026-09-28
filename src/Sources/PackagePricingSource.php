@@ -22,6 +22,7 @@ final readonly class PackagePricingSource implements FallbackPolicy, PricingCata
      *     effective_at: string|null,
      *     currency: string,
      *     fallback_blocked?: list<string>,
+     *     aliases?: array<string, string>,
      *     prices: array<string, array{
      *         source: string,
      *         notes?: string,
@@ -31,10 +32,19 @@ final readonly class PackagePricingSource implements FallbackPolicy, PricingCata
      */
     public function __construct(private array $snapshot) {}
 
+    /**
+     * Find the reviewed price for an identity or a documented alias of one.
+     *
+     * An alias borrows its target's rates and provenance but keeps the
+     * requested identity, so a quote for a moving alias still reports the
+     * alias it was asked about. An alias whose target is not priced resolves
+     * to nothing rather than to a guess.
+     */
     #[Override]
     public function find(ModelIdentity $identity): ?PriceDefinition
     {
-        $price = $this->snapshot['prices'][$identity->key()] ?? null;
+        $key = $identity->key();
+        $price = $this->snapshot['prices'][$this->snapshot['aliases'][$key] ?? $key] ?? null;
 
         if ($price === null) {
             return null;

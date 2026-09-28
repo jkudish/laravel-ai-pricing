@@ -11,13 +11,13 @@ use Jkudish\LaravelAiPricing\ValueObjects\Usage;
 
 function packagePricingSource(): PackagePricingSource
 {
-    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
+    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, aliases?: array<string, string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
     $snapshot = require __DIR__.'/../../resources/pricing/provider-skus.php';
 
     return new PackagePricingSource($snapshot);
 }
 
-/** @return array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} */
+/** @return array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, aliases?: array<string, string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} */
 function packagePricingSnapshot(): array
 {
     return require __DIR__.'/../../resources/pricing/provider-skus.php';
@@ -31,7 +31,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-26')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-28')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -54,6 +54,8 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'Parallel Turbo' => ['parallel', 'turbo', 'additional_results', '1', '1000'],
     'Parallel Research Pro' => ['parallel', 'research-pro', 'processor_requests', '100', '1000'],
     'Valyu Research Standard' => ['valyu', 'research-standard', 'research_requests', '0.5', '1'],
+    'TypeSafe Jev 1.13 input' => ['typesafe', 'jev-1.13.0', 'input_tokens', '0.042', '1000000'],
+    'TypeSafe Jev 1.13 free output' => ['typesafe', 'jev-1.13.0', 'output_tokens', '0', '1000000'],
     'xAI Grok 4.6' => ['xai', 'grok-4.6', 'searches', '5', '1000'],
     'xAI Grok 4.6 X Search posts' => ['xai', 'grok-4.6', 'x_search_posts', '5', '1000'],
     'xAI Grok 4.6 X Search profiles' => ['xai', 'grok-4.6', 'x_search_profiles', '10', '1000'],
@@ -221,13 +223,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-26T18:50:00+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-28T03:42:00+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-26T18:50:00+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-28T03:42:00+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -247,8 +249,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(8)
-        ->and($snapshot['retrieved_at'])->toBe('2026-09-26T18:50:00+00:00')
+    expect($snapshot['version'])->toBe(9)
+        ->and($snapshot['retrieved_at'])->toBe('2026-09-28T03:42:00+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -267,7 +269,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10|17|18|23|26)\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10|17|18|23|26|28)\./');
     }
 });
 
@@ -407,4 +409,58 @@ it('bills X Search per fetched post and profile after the 2026-09-21 xAI change'
     expect((string) $toolsOnly->cost?->amount)->toBe('7.5')
         ->and($toolsOnly->completeness)->toBe(CostCompleteness::Complete)
         ->and($toolsOnly->missingUnits)->toBe([]);
+});
+
+it('bills TypeSafe Jev input tokens only and keeps its published free output complete', function (): void {
+    $jev = packagePricingSource()->find(new ModelIdentity('typesafe', 'jev-1.13.0'));
+
+    // The laravel/ai TypeSafe fixture reports 312 input and 48 output tokens.
+    // Hand-computed: 312 x 0.042 / 1_000_000 = 0.000013104; output is free.
+    $quote = (new CostCalculator)->calculate(new Usage(['input_tokens' => 312, 'output_tokens' => 48]), $jev);
+
+    expect((string) $quote->cost?->amount)->toBe('0.000013104')
+        ->and($quote->cost?->currency)->toBe('USD')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->missingUnits)->toBe([])
+        ->and($quote->source)->toBe(PricingSource::ProviderNative)
+        ->and((string) $quote->provenance?->reference)->toBe('https://docs.typesafe.ai/models');
+
+    // A billion input tokens is the provider's headline USD 42 rate.
+    $headline = (new CostCalculator)->calculate(new Usage(['input_tokens' => 1_000_000_000]), $jev);
+
+    expect((string) $headline->cost?->amount)->toBe('42');
+});
+
+it('prices documented Jev aliases at their target rate without rewriting the requested identity', function (string $alias): void {
+    $definition = packagePricingSource()->find(new ModelIdentity('typesafe', $alias));
+    $target = packagePricingSource()->find(new ModelIdentity('typesafe', 'jev-1.13.0'));
+
+    expect($definition)->not->toBeNull()
+        ->and($definition?->identity->toArray())->toBe(['provider' => 'typesafe', 'model' => $alias])
+        ->and(array_map(static fn ($rate): array => $rate->toArray(), $definition?->rates ?? []))
+        ->toBe(array_map(static fn ($rate): array => $rate->toArray(), $target?->rates ?? []))
+        ->and($definition?->sourceReference)->toBe('https://docs.typesafe.ai/models');
+})->with(['jev-latest', 'jev-preview', 'JEV-Latest']);
+
+it('points every snapshot alias at a priced identity and never at another alias', function (): void {
+    $snapshot = packagePricingSnapshot();
+
+    expect($snapshot['aliases'] ?? [])->not->toBeEmpty();
+
+    foreach ($snapshot['aliases'] ?? [] as $alias => $target) {
+        expect($snapshot['prices'])->not->toHaveKey($alias)
+            ->and($snapshot['prices'])->toHaveKey($target)
+            ->and($snapshot['aliases'] ?? [])->not->toHaveKey($target);
+    }
+});
+
+it('keeps unreviewed Jev versions and bare model names unpriced', function (string $model): void {
+    expect(packagePricingSource()->find(new ModelIdentity('typesafe', $model)))->toBeNull();
+})->with(['jev-1.14.0', 'jev-2.0.0', 'jev', 'jev-1.13']);
+
+it('resolves an alias whose target is not priced to nothing instead of a guess', function (): void {
+    $snapshot = packagePricingSnapshot();
+    $snapshot['aliases'] = ['typesafe:jev-latest' => 'typesafe:jev-9.0.0'];
+
+    expect((new PackagePricingSource($snapshot))->find(new ModelIdentity('typesafe', 'jev-latest')))->toBeNull();
 });
