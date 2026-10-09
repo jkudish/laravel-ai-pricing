@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 10,
-    'retrieved_at' => '2026-10-09T05:36:31+00:00',
+    'version' => 11,
+    'retrieved_at' => '2026-10-09T10:27:30+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -39,6 +39,7 @@ return [
         'anthropic:claude-sonnet-5-us',
         'openrouter:openai/gpt-5.6-terra-272k',
         'openrouter:openai/gpt-6-luna-272k',
+        'openrouter:google/gemini-3.1-flash-lite-standard-max',
         'you:research-frontier',
         'searchapi:search',
         'tavily:search',
@@ -317,6 +318,16 @@ return [
                 'cached_input_tokens' => ['amount' => '0.02', 'per' => '1000000'],
                 'cache_write_input_tokens' => ['amount' => '0.25', 'per' => '1000000'],
                 'exa_search_requests' => ['amount' => '0.007', 'per' => '1'],
+            ],
+        ],
+        'openrouter:google/gemini-3.1-flash-lite-standard-max' => [
+            'source' => 'https://openrouter.ai/api/v1/models/google/gemini-3.1-flash-lite-20260507/endpoints',
+            'notes' => 'Checked 2026-10-09. Synthetic worst-case billing basis for stable google/gemini-3.1-flash-lite (canonical google/gemini-3.1-flash-lite-20260507) under OpenRouter default routing at the standard service tier; not the preview, image or :batch variants. Default routing load-balances across google-ai-studio and google-vertex/global (USD 0.25/M input, 1.50/M output, 0.025/M cache read) and the regional google-vertex/us and google-vertex/eu endpoints (0.275, 1.65 and 0.0275, a 1.1x regional uplift), so every request is priced at the regional rates. Flex and priority endpoints are opt-in service tiers (service_tier, :floor, :nitro or tier-suffixed slugs) and are excluded; callers must not opt into them. Upstream standard paid rates confirmed at https://ai.google.dev/gemini-api/docs/pricing: 0.25/M text, image and video input, 0.50/M audio input, 1.50/M output including thinking, 0.025/M context caching plus 1.00/M tokens per hour of storage, and no long-context tier. Reasoning is output usage. Audio input is excluded. Cache writes are deliberately unpriced: the endpoint catalog lists input_cache_write at 0.0833/M (five minutes of storage) while https://openrouter.ai/docs/guides/best-practices/prompt-caching bills a Gemini cache write at the input price plus five minutes of storage, so a cache_write_input_tokens count stays missing. Implicit caching has no write cost. Cache reads use the 0.1x rate that the endpoint catalog and Google publish, not the guide\'s generic 0.25x Gemini constant. web_searches counts native Google Search grounding queries only (usage.server_tool_use.web_search_requests with the native engine), passed through at USD 14 per 1,000 per https://openrouter.ai/docs/guides/features/server-tools/web-search; Google\'s monthly free allowance is not subtracted. Exa and other engines, including auto with domain filters, are distinct units and stay unpriced. The generic openrouter:google/gemini-3.1-flash-lite identity is not priced by this snapshot. Snapshot invalidation: a change to the canonical revision, default-tier endpoint set, token rates or search pricing requires fresh review.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.275', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '1.65', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.0275', 'per' => '1000000'],
+                'web_searches' => ['amount' => '0.014', 'per' => '1'],
             ],
         ],
         'you:answer' => [

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Reviewed `openrouter:google/gemini-3.1-flash-lite-standard-max` pricing (pricing snapshot v11, retrieved 2026-10-09). It is a fallback-blocked bound basis for Gemini 3.1 Flash Lite under OpenRouter default routing at the standard tier, priced at the regional Vertex rates every default-routed request can hit: USD 0.275/M input, 1.65/M output, 0.0275/M cached input, and USD 0.014 per native Google Search grounding query (`web_searches`). The rates were checked against the dated OpenRouter endpoints catalog, OpenRouter's routing, caching and web-search guides, and <https://ai.google.dev/gemini-api/docs/pricing>. Cache writes stay unpriced because OpenRouter's catalog and guide disagree on them. Flex, priority, audio input and non-native search engines are excluded. The generic `openrouter:google/gemini-3.1-flash-lite` identity stays unpriced in the snapshot.
 - README section on the built-in model billing bases: the qualified identities, the caller's duty to enforce geography, service tier, context length and endpoint, the fallback-blocked generic identities, and the TTL cache-write units.
 - CONTRIBUTING checklist for updating the pricing snapshot.
 - Snapshot invariant test: a `fallback_blocked` identity is either unpriced or a deliberately bound basis on a named allowlist (currently the two OpenRouter `-272k` bases), so any new overlap fails, and no alias targets a fallback-blocked identity.

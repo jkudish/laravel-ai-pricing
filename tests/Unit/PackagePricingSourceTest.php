@@ -42,6 +42,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'Exa Research' => ['exa', 'research', 'agent_compute_units', '0.1', '1'],
     'Kagi FastGPT' => ['kagi', 'fastgpt', 'uncached_queries', '15', '1000'],
     'OpenRouter GPT-5.6 Terra long-context bound basis' => ['openrouter', 'openai/gpt-5.6-terra-272k', 'input_tokens', '4', '1000000'],
+    'OpenRouter Gemini 3.1 Flash Lite worst-case routing basis' => ['openrouter', 'google/gemini-3.1-flash-lite-standard-max', 'input_tokens', '0.275', '1000000'],
     'You Answer' => ['you', 'answer', 'requests', '5', '1000'],
     'You Research Lite' => ['you', 'research-lite', 'requests', '12', '1000'],
     'You Research Standard' => ['you', 'research-standard', 'requests', '50', '1000'],
@@ -223,13 +224,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T05:36:31+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T10:27:30+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T05:36:31+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T10:27:30+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -249,8 +250,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(10)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-09T05:36:31+00:00')
+    expect($snapshot['version'])->toBe(11)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-09T10:27:30+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -300,7 +301,7 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T05:36:31+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T10:27:30+00:00')
         ->and($definition->effectiveAt)->toBeNull()
         ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain('Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
@@ -525,6 +526,48 @@ it('points every snapshot alias at a priced identity and never at another alias'
     }
 });
 
+it('quotes the Gemini 3.1 Flash Lite routing basis at regional worst-case rates and keeps unreviewed units missing', function (): void {
+    $identity = new ModelIdentity('openrouter', 'google/gemini-3.1-flash-lite-standard-max');
+    $definition = packagePricingSource()->find($identity);
+    assert($definition !== null);
+
+    $quote = (new CostCalculator)->calculate(new Usage([
+        'input_tokens' => 1_000_000,
+        'cached_input_tokens' => 200_000,
+        'output_tokens' => 100_000,
+        'reasoning_tokens' => 40_000,
+        'web_searches' => 3,
+    ]), $definition);
+
+    // 1M x 0.275/M + 0.2M x 0.0275/M + 0.1M x 1.65/M (reasoning is inside the
+    // output count and has no separate rate) + 3 x 0.014 = 0.275 + 0.0055 +
+    // 0.165 + 0.042 = 0.4875.
+    expect((string) $quote->cost?->amount)->toBe('0.4875')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->missingUnits)->toBe([])
+        ->and($quote->source)->toBe(PricingSource::ProviderNative)
+        ->and($quote->provenance?->reference)->toBe('https://openrouter.ai/api/v1/models/google/gemini-3.1-flash-lite-20260507/endpoints')
+        ->and(packagePricingSnapshot()['prices'][$identity->key()]['notes'] ?? '')->toContain('Checked 2026-10-09.');
+
+    $cacheWrite = (new CostCalculator)->calculate(new Usage(['input_tokens' => 1_000, 'cache_write_input_tokens' => 1_000]), $definition);
+    $exa = (new CostCalculator)->calculate(new Usage(['input_tokens' => 1_000, 'exa_search_requests' => 1]), $definition);
+
+    expect($cacheWrite->completeness)->toBe(CostCompleteness::Partial)
+        ->and($cacheWrite->missingUnits)->toBe(['cache_write_input_tokens'])
+        ->and($exa->completeness)->toBe(CostCompleteness::Partial)
+        ->and($exa->missingUnits)->toBe(['exa_search_requests'])
+        ->and(packagePricingSource()->allowsFallback($identity))->toBeFalse();
+});
+
+it('leaves the generic and variant Gemini 3.1 Flash Lite identities unpriced by the snapshot', function (string $model): void {
+    expect(packagePricingSource()->find(new ModelIdentity('openrouter', $model)))->toBeNull();
+})->with([
+    'google/gemini-3.1-flash-lite',
+    'google/gemini-3.1-flash-lite-preview',
+    'google/gemini-3.1-flash-lite:batch',
+    'google/gemini-3.1-flash-lite-image',
+]);
+
 it('keeps every fallback-blocked identity unpriced unless it is an allowlisted bound basis, and never aliased', function (): void {
     $snapshot = packagePricingSnapshot();
     $blocked = $snapshot['fallback_blocked'] ?? [];
@@ -532,11 +575,15 @@ it('keeps every fallback-blocked identity unpriced unless it is an allowlisted b
     // Rule: a fallback-blocked identity is either unpriced (a generic identity
     // that cannot select a billing tier, or a configured-only/unavailable SKU)
     // or a deliberately bound basis named on this allowlist. The bounded
-    // OpenRouter -272k bases have been priced and fallback-blocked since 0.2.0
-    // so that only this reviewed snapshot or an explicit configured override
-    // can price them. The overlap must equal this list exactly, so any new
+    // OpenRouter -272k bases (since 0.2.0) and the Gemini 3.1 Flash Lite
+    // worst-case routing basis are priced and fallback-blocked so that only
+    // this reviewed snapshot or an explicit configured override can price them. The overlap must equal this list exactly, so any new
     // priced-and-blocked identity fails until it is added here on purpose.
-    $boundBasesAllowlist = ['openrouter:openai/gpt-5.6-terra-272k', 'openrouter:openai/gpt-6-luna-272k'];
+    $boundBasesAllowlist = [
+        'openrouter:openai/gpt-5.6-terra-272k',
+        'openrouter:openai/gpt-6-luna-272k',
+        'openrouter:google/gemini-3.1-flash-lite-standard-max',
+    ];
 
     expect($blocked)->not->toBeEmpty()
         ->and(array_values(array_intersect($blocked, array_keys($snapshot['prices']))))->toBe($boundBasesAllowlist);
