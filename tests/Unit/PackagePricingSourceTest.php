@@ -31,7 +31,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-09-28')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-09')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -223,13 +223,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-28T03:42:00+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T05:36:31+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-09-28T03:42:00+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T05:36:31+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -249,8 +249,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(9)
-        ->and($snapshot['retrieved_at'])->toBe('2026-09-28T03:42:00+00:00')
+    expect($snapshot['version'])->toBe(10)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-09T05:36:31+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -269,9 +269,80 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-09-(?:03|06|10|17|18|23|26|28)\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-09)\./');
     }
 });
+
+it('quotes reviewed eval billing bases with exact decimals and provenance without hiding unknown units', function (string $key, string $source, array $amounts, string $expectedCost): void {
+    [$provider, $model] = explode(':', $key, 2);
+    $definition = packagePricingSource()->find(new ModelIdentity($provider, $model));
+    expect($definition)->not->toBeNull();
+    assert($definition !== null);
+
+    expect(array_keys($definition->rates))->toBe(array_keys($amounts));
+    foreach ($amounts as $unit => $amount) {
+        expect(packagePricingSnapshot()['prices'][$key]['rates'][$unit]['amount'])->toBeString()
+            ->and(packagePricingSnapshot()['prices'][$key]['rates'][$unit]['per'])->toBeString()
+            ->and((string) $definition->rates[$unit]->amount)->toBe($amount)
+            ->and((string) $definition->rates[$unit]->per)->toBe('1000000')
+            ->and($definition->rates[$unit]->currency)->toBe('USD');
+    }
+
+    $usage = ['input_tokens' => 2000];
+    if (array_key_exists('output_tokens', $amounts)) {
+        $usage['output_tokens'] = 3000;
+    }
+    $complete = (new CostCalculator)->calculate(new Usage($usage), $definition);
+    $partial = (new CostCalculator)->calculate(new Usage([...$usage, 'unknown_billed_unit' => 1]), $definition);
+    $unknown = (new CostCalculator)->calculate(new Usage(['unknown_billed_unit' => 1]), $definition);
+
+    expect($complete->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
+        ->and($complete->completeness)->toBe(CostCompleteness::Complete)
+        ->and($complete->source)->toBe(PricingSource::ProviderNative)
+        ->and($complete->provenance?->reference)->toBe($source)
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T05:36:31+00:00')
+        ->and($definition->effectiveAt)->toBeNull()
+        ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain('Checked 2026-10-09.')
+        ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
+        ->and($partial->completeness)->toBe(CostCompleteness::Partial)
+        ->and($partial->missingUnits)->toBe(['unknown_billed_unit'])
+        ->and($unknown->cost)->toBeNull()
+        ->and($unknown->completeness)->toBe(CostCompleteness::Unavailable);
+})->with([
+    ['anthropic:claude-opus-5-5-global-standard', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '4', 'output_tokens' => '20', 'cached_input_tokens' => '0.20', 'cache_write_input_tokens_5m' => '5', 'cache_write_input_tokens_1h' => '8'], '0.068'],
+    ['anthropic:claude-sonnet-5-5-global-standard', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '2', 'output_tokens' => '10', 'cached_input_tokens' => '0.10', 'cache_write_input_tokens_5m' => '2.50', 'cache_write_input_tokens_1h' => '4'], '0.034'],
+    ['anthropic:claude-haiku-5-5-global-short', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '0.10', 'output_tokens' => '0.50', 'cached_input_tokens' => '0.01', 'cache_write_input_tokens_5m' => '0.125', 'cache_write_input_tokens_1h' => '0.20'], '0.0017'],
+    ['anthropic:claude-haiku-5-5-global-long', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '0.50', 'output_tokens' => '2.50', 'cached_input_tokens' => '0.05', 'cache_write_input_tokens_5m' => '0.625', 'cache_write_input_tokens_1h' => '1'], '0.0085'],
+    ['openai:gpt-6.1-sol-standard-short', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '2', 'output_tokens' => '10', 'cached_input_tokens' => '0.10', 'cache_write_input_tokens' => '2.50'], '0.034'],
+    ['openai:gpt-6.1-sol-standard-long', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '4', 'output_tokens' => '15', 'cached_input_tokens' => '0.20', 'cache_write_input_tokens' => '5'], '0.053'],
+    ['openai:gpt-6-luna-standard-short', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '0.10', 'output_tokens' => '0.50', 'cached_input_tokens' => '0.01', 'cache_write_input_tokens' => '0.125'], '0.0017'],
+    ['openai:gpt-6-luna-standard-long', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '0.20', 'output_tokens' => '0.75', 'cached_input_tokens' => '0.02', 'cache_write_input_tokens' => '0.25'], '0.00265'],
+    ['openai:decisions-gpt-6-luna-short', 'https://developers.openai.com/api/docs/guides/decisions', ['input_tokens' => '0.10', 'output_tokens' => '0', 'cached_input_tokens' => '0', 'cache_write_input_tokens' => '0'], '0.0002'],
+    ['openai:decisions-gpt-6-luna-long', 'https://developers.openai.com/api/docs/guides/decisions', ['input_tokens' => '0.20', 'output_tokens' => '0', 'cached_input_tokens' => '0', 'cache_write_input_tokens' => '0'], '0.0004'],
+    ['zai:glm-5.3', 'https://docs.z.ai/guides/overview/pricing', ['input_tokens' => '1.4', 'cached_input_tokens' => '0.26', 'output_tokens' => '4.4'], '0.016'],
+    ['zai:glm-5.3-flash', 'https://docs.z.ai/guides/overview/pricing', ['input_tokens' => '0.15', 'cached_input_tokens' => '0.03', 'output_tokens' => '0.50'], '0.0018'],
+    ['deepseek:deepseek-v4-pro-peak', 'https://api-docs.deepseek.com/quick_start/pricing', ['input_tokens' => '1.32', 'cached_input_tokens' => '0.044', 'output_tokens' => '3.96'], '0.01452'],
+    ['cloudflare:@cf/cloudflare/clef', 'https://developers.cloudflare.com/workers-ai/platform/pricing/', ['input_tokens' => '0.24'], '0.00048'],
+    ['cloudflare:@cf/cloudflare/clef-flash', 'https://developers.cloudflare.com/workers-ai/platform/pricing/', ['input_tokens' => '0.09'], '0.00018'],
+]);
+
+it('keeps unspecified routing and retired eval identities unavailable instead of choosing a cheap tier', function (string $provider, string $sku): void {
+    $identity = new ModelIdentity($provider, $sku);
+
+    expect(packagePricingSource()->find($identity))->toBeNull()
+        ->and(packagePricingSource()->allowsFallback($identity))->toBeFalse();
+})->with([
+    ['anthropic', 'claude-opus-5-5'],
+    ['anthropic', 'claude-sonnet-5-5'],
+    ['anthropic', 'claude-haiku-5-5'],
+    ['openai', 'gpt-6.1-sol'],
+    ['openai', 'gpt-6-luna'],
+    ['openai', 'decisions'],
+    ['deepseek', 'deepseek-v4'],
+    ['deepseek', 'deepseek-v4-pro'],
+    ['deepseek', 'deepseek-v4-flash'],
+    ['deepseek', 'deepseek-v4-flash-vision-exp'],
+]);
 
 it('does not turn missing or unknown DataForSEO usage into a complete or zero quote', function (string $sku): void {
     $definition = packagePricingSource()->find(new ModelIdentity('dataforseo', $sku));

@@ -8,11 +8,33 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 9,
-    'retrieved_at' => '2026-09-28T03:42:00+00:00',
+    'version' => 10,
+    'retrieved_at' => '2026-10-09T05:36:31+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
+        // Checked 2026-10-09 against https://platform.claude.com/docs/en/about-claude/pricing
+        // and https://platform.claude.com/docs/en/about-claude/models/overview.
+        // Generic identities cannot distinguish geography, fast mode or Haiku's
+        // prompt-length tier. The qualified entries below are billing bases,
+        // not provider model IDs or aliases; callers must enforce their scope.
+        'anthropic:claude-opus-5-5',
+        'anthropic:claude-sonnet-5-5',
+        'anthropic:claude-haiku-5-5',
+        // Checked 2026-10-09 against https://developers.openai.com/api/docs/pricing
+        // and https://developers.openai.com/api/docs/guides/decisions.
+        // Generic model/API identities are unavailable because context, regional
+        // processing and service tier change rates; Decisions is separately billed.
+        'openai:gpt-6.1-sol',
+        'openai:gpt-6-luna',
+        'openai:decisions',
+        // Checked 2026-10-09 against https://api-docs.deepseek.com/quick_start/pricing.
+        // No generic V4 SKU is documented. Pro is time-tiered; retired Flash names
+        // now run V4.1-Flash. Do not price them as the retired V4-Flash model.
+        'deepseek:deepseek-v4',
+        'deepseek:deepseek-v4-pro',
+        'deepseek:deepseek-v4-flash',
+        'deepseek:deepseek-v4-flash-vision-exp',
         'anthropic:claude-sonnet-5',
         'anthropic:claude-sonnet-5-us',
         'openrouter:openai/gpt-5.6-terra-272k',
@@ -40,6 +62,151 @@ return [
         'typesafe:jev-preview' => 'typesafe:jev-1.13.0',
     ],
     'prices' => [
+        'anthropic:claude-opus-5-5-global-standard' => [
+            'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
+            'notes' => 'Checked 2026-10-09. Billing basis for claude-opus-5-5, global geography, standard speed, synchronous Messages API only; not a provider alias. All context lengths. Excludes fast mode, US geography (1.1x), batch and server tools. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs.',
+            'rates' => [
+                'input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '20', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'cache_write_input_tokens_5m' => ['amount' => '5', 'per' => '1000000'],
+                'cache_write_input_tokens_1h' => ['amount' => '8', 'per' => '1000000'],
+            ],
+        ],
+        'anthropic:claude-sonnet-5-5-global-standard' => [
+            'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
+            'notes' => 'Checked 2026-10-09. Billing basis for claude-sonnet-5-5, global geography, synchronous Messages API only; not a provider alias. All context lengths. Excludes US geography (1.1x), batch and server tools. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs.',
+            'rates' => [
+                'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                'cache_write_input_tokens_5m' => ['amount' => '2.50', 'per' => '1000000'],
+                'cache_write_input_tokens_1h' => ['amount' => '4', 'per' => '1000000'],
+            ],
+        ],
+        'anthropic:claude-haiku-5-5-global-short' => [
+            'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
+            'notes' => 'Checked 2026-10-09. Billing basis for claude-haiku-5-5 with global geography and at most 100,000 prompt tokens, including cache reads and writes. Synchronous Messages API only; not an alias. Excludes US geography (1.1x), batch and server tools. Cache input partitions are exclusive; TTL-specific writes are not interchangeable.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.01', 'per' => '1000000'],
+                'cache_write_input_tokens_5m' => ['amount' => '0.125', 'per' => '1000000'],
+                'cache_write_input_tokens_1h' => ['amount' => '0.20', 'per' => '1000000'],
+            ],
+        ],
+        'anthropic:claude-haiku-5-5-global-long' => [
+            'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
+            'notes' => 'Checked 2026-10-09. Billing basis for claude-haiku-5-5 with global geography and more than 100,000 prompt tokens, including cache reads and writes. The higher tier applies to the entire request. Synchronous Messages API only; not an alias. Excludes US geography (1.1x), batch and server tools. Cache input partitions are exclusive; TTL-specific writes are not interchangeable.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.05', 'per' => '1000000'],
+                'cache_write_input_tokens_5m' => ['amount' => '0.625', 'per' => '1000000'],
+                'cache_write_input_tokens_1h' => ['amount' => '1', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-6.1-sol-standard-short' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, at most 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'rates' => [
+                'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-6.1-sol-standard-long' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, more than 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'rates' => [
+                'input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '15', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-6-luna-standard-short' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6-luna generation, standard service tier, at most 272,000 input tokens; not an alias. Not Decisions. Excludes regional/FedRAMP 10% uplift, batch, flex, fast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.01', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '0.125', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-6-luna-standard-long' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6-luna generation, standard service tier, more than 272,000 input tokens; not an alias. Not Decisions. Excludes regional/FedRAMP 10% uplift, batch, flex, fast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.02', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '0.25', 'per' => '1000000'],
+            ],
+        ],
+        'openai:decisions-gpt-6-luna-short' => [
+            'source' => 'https://developers.openai.com/api/docs/guides/decisions',
+            'notes' => 'Checked 2026-10-09. Public beta POST /v1/decisions with gpt-6-luna: input only, USD 0.10/M; no cache-read, cache-write or output-token charges. Billing basis, not a model alias. At most 272,000 input tokens per https://developers.openai.com/api/docs/pricing. Excludes regional processing premium and long-context multiplier. Do not reuse generation prices for this endpoint.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '0', 'per' => '1000000'],
+            ],
+        ],
+        'openai:decisions-gpt-6-luna-long' => [
+            'source' => 'https://developers.openai.com/api/docs/guides/decisions',
+            'notes' => 'Checked 2026-10-09. Public beta POST /v1/decisions with gpt-6-luna: input-only billing with the long-context 2x input multiplier (more than 272,000 input tokens) documented at https://developers.openai.com/api/docs/pricing. No cache-read, cache-write or output-token charges. Billing basis, not a model alias. Excludes regional processing premium.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '0', 'per' => '1000000'],
+            ],
+        ],
+        'zai:glm-5.3' => [
+            'source' => 'https://docs.z.ai/guides/overview/pricing',
+            'notes' => 'Checked 2026-10-09. Direct Z.AI pay-as-you-go API, not Coding Plan or OpenRouter. Exclusive input/cache-hit partitions; output includes reasoning. Cache storage is only limited-time free and is deliberately unpriced; storage or tool usage must not be silently omitted.',
+            'rates' => [
+                'input_tokens' => ['amount' => '1.4', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.26', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '4.4', 'per' => '1000000'],
+            ],
+        ],
+        'zai:glm-5.3-flash' => [
+            'source' => 'https://docs.z.ai/guides/overview/pricing',
+            'notes' => 'Checked 2026-10-09. Direct Z.AI pay-as-you-go API, not Coding Plan, FlashX or OpenRouter. Exclusive input/cache-hit partitions; output includes reasoning. Cache storage is only limited-time free and is deliberately unpriced; storage or tool usage must not be silently omitted.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.03', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+            ],
+        ],
+        'deepseek:deepseek-v4-pro-peak' => [
+            'source' => 'https://api-docs.deepseek.com/quick_start/pricing',
+            'notes' => 'Checked 2026-10-09. Direct deepseek-v4-pro currently runs DeepSeek-V4-Pro-0813. Synthetic peak billing basis, not a provider alias: USD 1.32/M cache-miss input, 0.044/M cache-hit input, 3.96/M output. Peak hours 01:00-04:00 and 06:00-10:00 UTC Monday-Friday except Chinese public holidays; off-peak is half price. May be used as a conservative reservation at any time, not an exact off-peak invoice. Exclusive input/cache-hit partitions; thinking is output usage. Generic V4 and retired V4-Flash are not this model.',
+            'rates' => [
+                'input_tokens' => ['amount' => '1.32', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.044', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '3.96', 'per' => '1000000'],
+            ],
+        ],
+        'cloudflare:@cf/cloudflare/clef' => [
+            'source' => 'https://developers.cloudflare.com/workers-ai/platform/pricing/',
+            'notes' => 'Checked 2026-10-09. Workers AI input-only unit price confirmed at https://developers.cloudflare.com/workers-ai/models/clef/. USD 0.24/M input tokens, equivalent to neuron billing. No output rate is published; do not invent a free output-token unit. Retail paid usage before the shared daily free neuron allowance; do not subtract that allowance per request.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.24', 'per' => '1000000'],
+            ],
+        ],
+        'cloudflare:@cf/cloudflare/clef-flash' => [
+            'source' => 'https://developers.cloudflare.com/workers-ai/platform/pricing/',
+            'notes' => 'Checked 2026-10-09. Workers AI input-only unit price confirmed at https://developers.cloudflare.com/workers-ai/models/clef-flash/. USD 0.09/M input tokens, equivalent to neuron billing. No output rate is published; do not invent a free output-token unit. Retail paid usage before the shared daily free neuron allowance; do not subtract that allowance per request.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.09', 'per' => '1000000'],
+            ],
+        ],
         'anthropic:claude-sonnet-5-global' => [
             'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
             'notes' => 'Checked 2026-09-17. Claude API global routing (the default) for Claude Sonnet 5 base input and output tokens only. The generic model identity is intentionally not priced because inference_geo=us costs 1.1x. Prompt-cache writes and reads require their exact usage units and TTL-specific rates; web search is a separate billed unit.',

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-09
+
+### Added
+
+- Reviewed evaluation-model and decision-API pricing (pricing snapshot v10, retrieved 2026-10-09). Tier-dependent prices are published as qualified billing bases, not provider aliases; callers must enforce the geography, service tier, context length and endpoint each one names:
+  - Anthropic, global geography, synchronous Messages API: `claude-opus-5-5-global-standard` (USD 4/M input, 20/M output), `claude-sonnet-5-5-global-standard` (2/10), and `claude-haiku-5-5-global-short` (0.10/0.50, prompts up to 100,000 tokens) and `-global-long` (0.50/2.50, above that; the prompt length counts cache reads and writes). Cache reads plus TTL-specific `cache_write_input_tokens_5m` and `cache_write_input_tokens_1h` units, from <https://platform.claude.com/docs/en/about-claude/pricing>.
+  - OpenAI direct, standard tier: `gpt-6.1-sol-standard-short`/`-long` (2/10 up to 272,000 input tokens; 4/15 above) and `gpt-6-luna-standard-short`/`-long` (0.10/0.50; 0.20/0.75), from <https://developers.openai.com/api/docs/pricing>.
+  - OpenAI Decisions (public beta) with GPT-6 Luna: `decisions-gpt-6-luna-short`/`-long`, input only at 0.10/M and 0.20/M, with explicit zero output and cache rates, from <https://developers.openai.com/api/docs/guides/decisions>.
+  - Z.AI direct: `zai:glm-5.3` (1.4/4.4) and `zai:glm-5.3-flash` (0.15/0.50), with cached input; cache storage is deliberately unpriced while Z.AI lists it as limited-time free.
+  - DeepSeek direct: `deepseek-v4-pro-peak` (1.32/M cache-miss input, 3.96/M output) as a conservative peak-rate reservation basis; off-peak is half price.
+  - Cloudflare Workers AI: `@cf/cloudflare/clef` (0.24/M input) and `clef-flash` (0.09/M input), input only, with no invented output rate.
+- Generic identities that cannot select a billing tier are fallback-blocked and stay unavailable: `anthropic:claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`; `openai:gpt-6.1-sol`, `gpt-6-luna`, `decisions`; and `deepseek:deepseek-v4`, `deepseek-v4-pro`, `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`. The legacy DeepSeek Flash names now run V4.1-Flash and must not be priced as the retired V4-Flash model.
+
 ## [0.2.1] - 2026-09-28
 
 ### Added
@@ -77,7 +90,8 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.1...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.2...main
+[0.2.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.1...v0.1.2
