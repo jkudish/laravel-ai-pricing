@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - README section on the built-in model billing bases: the qualified identities, the caller's duty to enforce geography, service tier, context length and endpoint, the fallback-blocked generic identities, and the TTL cache-write units.
 - CONTRIBUTING checklist for updating the pricing snapshot.
-- Snapshot invariant test: no `fallback_blocked` identity is priced, except the two bounded OpenRouter `-272k` bases that are pinned to the snapshot on purpose, and no alias targets a fallback-blocked identity.
+- Snapshot invariant test: a `fallback_blocked` identity is either unpriced or a deliberately bound basis on a named allowlist (currently the two OpenRouter `-272k` bases), so any new overlap fails, and no alias targets a fallback-blocked identity.
 
 ### Changed
 

@@ -37,7 +37,7 @@ The reviewed snapshot lives in `resources/pricing/provider-skus.php`. Follow `.a
 - [ ] Add any new review date to the regex in the `retains a per-SKU source review date` test in `tests/Unit/PackagePricingSourceTest.php`. Update the tests that pin `version` and `retrieved_at` in the same file.
 - [ ] Publish a price that depends on geography, service tier, context length or endpoint as a qualified billing basis, such as `openai:gpt-6.1-sol-standard-short`, never as an alias of the provider's model ID. Add the generic identity to `fallback_blocked` so it stays unavailable instead of falling back to a cheaper remote rate.
 - [ ] Use `aliases` only for provider-documented moving aliases that resolve to one versioned model at one price, such as `typesafe:jev-latest`. An alias must never target a fallback-blocked identity.
-- [ ] Keep every identity in `fallback_blocked` out of `prices`. The only exceptions are the bounded OpenRouter `-272k` bases, which are pinned to the snapshot on purpose; the invariant test lists them.
+- [ ] Keep every identity in `fallback_blocked` out of `prices` unless it is a deliberately bound basis that only the snapshot or a configured override may price, such as the OpenRouter `-272k` bases. Add any new bound basis to the allowlist in the invariant test in `tests/Unit/PackagePricingSourceTest.php`; any other overlap fails.
 - [ ] Use a TTL-specific unit, such as `cache_write_input_tokens_5m` or `cache_write_input_tokens_1h`, when the provider bills cache writes by TTL.
 - [ ] Record amounts and divisors as decimal strings, add exact-decimal tests for each new entry, and update the README tables and the changelog.
 

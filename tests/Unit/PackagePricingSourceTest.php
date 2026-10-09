@@ -525,18 +525,21 @@ it('points every snapshot alias at a priced identity and never at another alias'
     }
 });
 
-it('never prices a fallback-blocked identity or points an alias at one', function (): void {
+it('keeps every fallback-blocked identity unpriced unless it is an allowlisted bound basis, and never aliased', function (): void {
     $snapshot = packagePricingSnapshot();
     $blocked = $snapshot['fallback_blocked'] ?? [];
 
-    // The two bounded OpenRouter bases are priced and also fallback-blocked on
-    // purpose (0.2.0), so that only this snapshot or a configured override can
-    // ever price them. Every other blocked identity, including each generic
-    // identity that cannot select a billing tier, must stay unpriced.
-    $pinnedBases = ['openrouter:openai/gpt-5.6-terra-272k', 'openrouter:openai/gpt-6-luna-272k'];
+    // Rule: a fallback-blocked identity is either unpriced (a generic identity
+    // that cannot select a billing tier, or a configured-only/unavailable SKU)
+    // or a deliberately bound basis named on this allowlist. The bounded
+    // OpenRouter -272k bases have been priced and fallback-blocked since 0.2.0
+    // so that only this reviewed snapshot or an explicit configured override
+    // can price them. The overlap must equal this list exactly, so any new
+    // priced-and-blocked identity fails until it is added here on purpose.
+    $boundBasesAllowlist = ['openrouter:openai/gpt-5.6-terra-272k', 'openrouter:openai/gpt-6-luna-272k'];
 
     expect($blocked)->not->toBeEmpty()
-        ->and(array_values(array_intersect($blocked, array_keys($snapshot['prices']))))->toBe($pinnedBases);
+        ->and(array_values(array_intersect($blocked, array_keys($snapshot['prices']))))->toBe($boundBasesAllowlist);
 
     foreach ($snapshot['aliases'] ?? [] as $alias => $target) {
         expect(in_array($target, $blocked, true))->toBeFalse("Alias [{$alias}] targets the fallback-blocked identity [{$target}].");
