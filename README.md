@@ -197,6 +197,50 @@ identity with the account's current `credits` rate before using a hard budget:
 The example amount is illustrative only. Do not derive either configured rate
 from a public minimum; use the effective price for the consuming account.
 
+### Built-in model billing bases
+
+Some model prices depend on facts the model name does not carry: inference geography, service tier, prompt length, or the API endpoint. The snapshot publishes those prices as qualified billing bases. A billing basis is a pricing identity that names the conditions its rates apply to. It is not a provider model ID or an alias of one.
+
+| Provider | Billing basis | Applies only when | Usage units |
+| --- | --- | --- | --- |
+| `anthropic` | `claude-opus-5-5-global-standard` | Global geography, standard speed, synchronous Messages API | `input_tokens`, `output_tokens`, `cached_input_tokens`, `cache_write_input_tokens_5m`, `cache_write_input_tokens_1h` |
+| `anthropic` | `claude-sonnet-5-5-global-standard` | Global geography, synchronous Messages API | Same as Opus 5.5 |
+| `anthropic` | `claude-haiku-5-5-global-short`, `claude-haiku-5-5-global-long` | Global geography, synchronous Messages API; prompts up to 100,000 tokens (`-short`) or above (`-long`), counting cache reads and writes | Same as Opus 5.5 |
+| `openai` | `gpt-6.1-sol-standard-short`, `gpt-6.1-sol-standard-long` | Direct API, standard service tier; up to 272,000 input tokens (`-short`) or above (`-long`) | `input_tokens`, `output_tokens`, `cached_input_tokens`, `cache_write_input_tokens` |
+| `openai` | `gpt-6-luna-standard-short`, `gpt-6-luna-standard-long` | Direct generation API, standard service tier; same 272,000-token threshold | Same as GPT-6.1 Sol |
+| `openai` | `decisions-gpt-6-luna-short`, `decisions-gpt-6-luna-long` | `POST /v1/decisions` (public beta) with GPT-6 Luna; same 272,000-token threshold | `input_tokens`; output and cache units are published as explicit zero rates |
+| `zai` | `glm-5.3`, `glm-5.3-flash` | Direct Z.AI pay-as-you-go API, not the Coding Plan or OpenRouter | `input_tokens`, `cached_input_tokens`, `output_tokens` |
+| `deepseek` | `deepseek-v4-pro-peak` | Direct API, priced at the peak rate as a conservative reservation; off-peak is half price | `input_tokens`, `cached_input_tokens`, `output_tokens` |
+| `cloudflare` | `@cf/cloudflare/clef`, `@cf/cloudflare/clef-flash` | Workers AI paid usage at the retail rate; the shared daily free allowance is not subtracted per request | `input_tokens` |
+
+The package cannot see where or how a request ran, so the caller must enforce each basis's conditions and choose the basis that matches the request. Send Claude requests to global inference geography, send OpenAI requests on the standard tier, choose `-short` or `-long` from the request's actual prompt length, and use a Decisions basis only for the Decisions endpoint. A basis applied to a request that breaks its conditions produces a wrong number, not an unavailable one. Each entry's `notes` in `resources/pricing/provider-skus.php` lists what it excludes, such as US geography (1.1x), fast mode, batch, flex, regional processing uplifts and server tools.
+
+The generic identities that cannot select a tier are fallback-blocked: `anthropic:claude-opus-5-5`, `claude-sonnet-5-5` and `claude-haiku-5-5`; `openai:gpt-6.1-sol`, `gpt-6-luna` and `decisions`; and `deepseek:deepseek-v4`, `deepseek-v4-pro`, `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp`. They resolve to unavailable, and the Portkey fallback is never consulted for them, so a completed response that reports the provider's generic model ID is not priced at a cheaper tier by accident. Provider-reported cost and configured prices still apply. To cost such a response, pass the basis you enforced as the model:
+
+```php
+// The application sent this request to global inference with at most 100,000 prompt tokens.
+$cost = AiPricing::cost([
+    'provider' => 'anthropic',
+    'model' => 'claude-haiku-5-5-global-short',
+    'usage' => $response->usage,
+    'raw' => $response->raw,     // Lets the adapter read Anthropic's cache TTL split.
+    'steps' => $response->steps,
+]);
+
+$quote = AiPricing::quote('openai', 'gpt-6.1-sol-standard-long', new Usage([
+    'input_tokens' => 300_000,
+    'output_tokens' => 4_000,
+]));
+```
+
+Anthropic bills cache writes by TTL: a 5-minute write and a 1-hour write have different rates. The Anthropic bases therefore price `cache_write_input_tokens_5m` and `cache_write_input_tokens_1h` and publish no generic `cache_write_input_tokens` rate. The adapters map Anthropic's `usage.cache_creation.ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens` to those units and keep the aggregate `cache_creation_input_tokens` as `cache_write_input_tokens`. The calculator treats the three units as one family and never bills the split on top of the aggregate:
+
+- When every reported TTL count has a TTL rate, the split bills at those rates.
+- When the price only has a generic `cache_write_input_tokens` rate, as remote catalogs do, the reported aggregate bills at that rate, as it did before the split was mapped.
+- An aggregate with no split cannot be priced on an Anthropic basis. It stays a missing unit and the quote is partial, because the package does not guess which TTL was written.
+
+laravel/ai normalizes Anthropic usage to a single `cacheWriteInputTokens` count. For a non-streamed response, the adapter recovers the split from the response's `raw` HTTP response, summed across `steps` for tool loops, and uses it only when it adds up to the reported aggregate. Streamed and serialized responses carry no raw response, so their cache writes keep a partial quote on an Anthropic basis. Callers that record the split themselves can pass `cache_write_input_tokens_5m` and `cache_write_input_tokens_1h` directly.
+
 Snapshot entries include source and retrieval metadata in `resources/pricing/provider-skus.php`. Future rate changes should follow `.agents/skills/fetching-provider-pricing`; runtime code never scrapes provider pricing pages.
 
 ## Default behavior

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- README section on the built-in model billing bases: the qualified identities, the caller's duty to enforce geography, service tier, context length and endpoint, the fallback-blocked generic identities, and the TTL cache-write units.
+- CONTRIBUTING checklist for updating the pricing snapshot.
+- Snapshot invariant test: no `fallback_blocked` identity is priced, except the two bounded OpenRouter `-272k` bases that are pinned to the snapshot on purpose, and no alias targets a fallback-blocked identity.
+
+### Changed
+
+- The cost calculator settles `cache_write_input_tokens`, `cache_write_input_tokens_5m` and `cache_write_input_tokens_1h` as one family and never bills the TTL split on top of the aggregate. TTL rates price the split. A price with only a generic cache-write rate keeps billing the reported aggregate at that rate, as before. A generic count with no split stays a missing unit on a TTL-only basis.
+
+### Fixed
+
+- Anthropic responses with cache writes now price completely on the Anthropic 5.5 billing bases. Previously the adapters folded every cache write into the generic `cache_write_input_tokens` count, which those bases do not price, so any such response quoted partial. The normalized, Claude and Laravel AI adapters now map Anthropic's `usage.cache_creation.ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens` to `cache_write_input_tokens_5m` and `cache_write_input_tokens_1h`, next to the unchanged aggregate. laravel/ai drops this split from its normalized usage, so for non-streamed responses the Laravel AI adapter reads it from the raw HTTP response, summed across steps. It uses the split only when it adds up to the reported aggregate. Streamed responses still quote partial on these bases.
+
 ## [0.2.2] - 2026-10-09
 
 ### Added
