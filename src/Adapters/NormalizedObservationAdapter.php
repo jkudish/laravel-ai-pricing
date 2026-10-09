@@ -91,7 +91,47 @@ class NormalizedObservationAdapter implements ObservationAdapter
             }
         }
 
-        return $units;
+        return [...$units, ...$this->cacheWriteTtlUnits($data, $units)];
+    }
+
+    /**
+     * Map Anthropic's nested TTL breakdown of cache-written input tokens.
+     *
+     * Anthropic reports cache_creation_input_tokens as the aggregate and
+     * usage.cache_creation.ephemeral_5m_input_tokens and
+     * ephemeral_1h_input_tokens as its split by cache TTL. The split maps to
+     * the cache_write_input_tokens_5m and cache_write_input_tokens_1h units
+     * alongside the unchanged aggregate; the cost calculator treats them as
+     * one partitioned family, so the split never bills on top of the
+     * aggregate. Explicit flat TTL units already on the payload win.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, string|int>  $units
+     * @return array<string, string|int>
+     */
+    private function cacheWriteTtlUnits(array $data, array $units): array
+    {
+        $breakdown = $data['cache_creation'] ?? null;
+
+        if (is_object($breakdown)) {
+            $breakdown = get_object_vars($breakdown);
+        }
+
+        if (! is_array($breakdown)) {
+            return [];
+        }
+
+        $mapped = [];
+
+        foreach (['cache_write_input_tokens_5m' => 'ephemeral_5m_input_tokens', 'cache_write_input_tokens_1h' => 'ephemeral_1h_input_tokens'] as $unit => $key) {
+            $value = $breakdown[$key] ?? null;
+
+            if (! array_key_exists($unit, $units) && (is_int($value) || (is_string($value) && is_numeric($value)))) {
+                $mapped[$unit] = $value;
+            }
+        }
+
+        return $mapped;
     }
 
     /** @param array<string, mixed> $data

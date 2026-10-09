@@ -14,8 +14,10 @@ use Jkudish\LaravelAiPricing\Adapters\LaravelAiProviderCostExtractor;
 use Jkudish\LaravelAiPricing\Adapters\NormalizedObservationAdapter;
 use Jkudish\LaravelAiPricing\Contracts\PricingCatalog;
 use Jkudish\LaravelAiPricing\CostCalculator;
+use Jkudish\LaravelAiPricing\Enums\CostCompleteness;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
 use Jkudish\LaravelAiPricing\PricingResolver;
+use Jkudish\LaravelAiPricing\Sources\PackagePricingSource;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Jkudish\LaravelAiPricing\ValueObjects\Rate;
@@ -1149,3 +1151,259 @@ it('keeps raw Anthropic-shaped usage exclusive of cache tokens', function (): vo
         'cache_write_input_tokens' => '10',
     ]);
 });
+
+/**
+ * The 1-hour cache duration example usage from
+ * https://platform.claude.com/docs/en/build-with-claude/prompt-caching, where
+ * cache_creation_input_tokens equals the sum of the cache_creation split.
+ *
+ * @return array<string, mixed>
+ */
+function anthropicTtlUsage(bool $nested = true): array
+{
+    $usage = [
+        'input_tokens' => 2048,
+        'cache_read_input_tokens' => 1800,
+        'cache_creation_input_tokens' => 248,
+        'output_tokens' => 503,
+    ];
+
+    if ($nested) {
+        $usage['cache_creation'] = ['ephemeral_5m_input_tokens' => 148, 'ephemeral_1h_input_tokens' => 100];
+    }
+
+    return $usage;
+}
+
+function anthropicTtlBasis(): PriceDefinition
+{
+    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, aliases?: array<string, string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
+    $snapshot = require __DIR__.'/../../resources/pricing/provider-skus.php';
+    $definition = (new PackagePricingSource($snapshot))->find(new ModelIdentity('anthropic', 'claude-sonnet-5-5-global-standard'));
+    assert($definition !== null);
+
+    return $definition;
+}
+
+function genericCacheWriteDefinition(): PriceDefinition
+{
+    return new PriceDefinition(
+        new ModelIdentity('anthropic', 'claude-catalog-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '2', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '10', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.10', '1000000'),
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '2.50', '1000000'),
+        ],
+        PricingSource::Portkey,
+    );
+}
+
+it('maps the nested Anthropic cache_creation TTL split next to the aggregate cache write count', function (object $adapter, bool $objectBreakdown): void {
+    $usage = anthropicTtlUsage();
+
+    if ($objectBreakdown) {
+        $usage['cache_creation'] = (object) $usage['cache_creation'];
+    }
+
+    $observation = $adapter->adapt(['provider' => 'anthropic', 'model' => 'claude-sonnet-5-5-global-standard', 'usage' => $usage]);
+
+    expect($observation->usage->toArray())->toBe([
+        'input_tokens' => '2048',
+        'output_tokens' => '503',
+        'cached_input_tokens' => '1800',
+        'cache_write_input_tokens' => '248',
+        'cache_write_input_tokens_5m' => '148',
+        'cache_write_input_tokens_1h' => '100',
+    ]);
+})->with([
+    'normalized, array split' => [new NormalizedObservationAdapter, false],
+    'normalized, object split' => [new NormalizedObservationAdapter, true],
+    'Claude harness, array split' => [new ClaudeObservationAdapter, false],
+    'Laravel AI raw Anthropic usage, array split' => [new LaravelAiObservationAdapter, false],
+    'Laravel AI raw Anthropic usage, object split' => [new LaravelAiObservationAdapter, true],
+]);
+
+it('keeps the Anthropic usage mapping unchanged when no TTL split is reported', function (object $adapter): void {
+    $observation = $adapter->adapt(['provider' => 'anthropic', 'model' => 'claude-test', 'usage' => anthropicTtlUsage(nested: false)]);
+
+    expect($observation->usage->toArray())->toBe([
+        'input_tokens' => '2048',
+        'output_tokens' => '503',
+        'cached_input_tokens' => '1800',
+        'cache_write_input_tokens' => '248',
+    ]);
+})->with([
+    'normalized' => [new NormalizedObservationAdapter],
+    'Claude harness' => [new ClaudeObservationAdapter],
+    'Laravel AI' => [new LaravelAiObservationAdapter],
+]);
+
+it('lets explicit flat TTL cache-write units win over the nested split', function (): void {
+    $observation = (new NormalizedObservationAdapter)->adapt([
+        'provider' => 'anthropic',
+        'model' => 'claude-test',
+        'usage' => [...anthropicTtlUsage(), 'cache_write_input_tokens_5m' => 48],
+    ]);
+
+    expect($observation->usage->toArray())->toMatchArray([
+        'cache_write_input_tokens' => '248',
+        'cache_write_input_tokens_5m' => '48',
+        'cache_write_input_tokens_1h' => '100',
+    ]);
+});
+
+it('quotes an Anthropic 5.5 response with TTL cache writes as complete on its TTL-only basis', function (object $adapter): void {
+    $observation = $adapter->adapt(['provider' => 'anthropic', 'model' => 'claude-sonnet-5-5-global-standard', 'usage' => anthropicTtlUsage()]);
+    $quote = (new CostCalculator)->calculate($observation->usage, anthropicTtlBasis());
+
+    // Sonnet 5.5 global standard, USD per million: 2048 x 2 input + 1800 x 0.10
+    // cache read + 148 x 2.50 five-minute write + 100 x 4 one-hour write + 503 x 10
+    // output = 0.004096 + 0.00018 + 0.00037 + 0.0004 + 0.00503 = 0.010076.
+    expect((string) $quote->cost?->amount)->toBe('0.010076')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->missingUnits)->toBe([]);
+})->with([
+    'normalized' => [new NormalizedObservationAdapter],
+    'Claude harness' => [new ClaudeObservationAdapter],
+    'Laravel AI' => [new LaravelAiObservationAdapter],
+]);
+
+it('keeps a generic cache_write_input_tokens count partial on a TTL-only basis', function (object $adapter, array $usage): void {
+    $observation = $adapter->adapt(['provider' => 'anthropic', 'model' => 'claude-sonnet-5-5-global-standard', 'usage' => $usage]);
+    $quote = (new CostCalculator)->calculate($observation->usage, anthropicTtlBasis());
+
+    // Without a TTL split the 248 written tokens cannot be priced: 0.004096
+    // input + 0.00018 cache read + 0.00503 output, and the write stays missing.
+    expect((string) $quote->cost?->amount)->toBe('0.009306')
+        ->and($quote->completeness)->toBe(CostCompleteness::Partial)
+        ->and($quote->missingUnits)->toBe(['cache_write_input_tokens']);
+})->with([
+    'Laravel AI raw Anthropic aggregate only' => [new LaravelAiObservationAdapter, anthropicTtlUsage(nested: false)],
+    'Claude harness aggregate only' => [new ClaudeObservationAdapter, anthropicTtlUsage(nested: false)],
+    'normalized generic unit' => [new NormalizedObservationAdapter, ['input_tokens' => 2048, 'cached_input_tokens' => 1800, 'cache_write_input_tokens' => 248, 'output_tokens' => 503]],
+]);
+
+it('bills the aggregate at a generic cache-write rate exactly as before when the split is mapped', function (): void {
+    $calculator = new CostCalculator;
+    $adapter = new NormalizedObservationAdapter;
+    $withSplit = $calculator->calculate(
+        $adapter->adapt(['provider' => 'anthropic', 'model' => 'claude-catalog-test', 'usage' => anthropicTtlUsage()])->usage,
+        genericCacheWriteDefinition(),
+    );
+    $withoutSplit = $calculator->calculate(
+        $adapter->adapt(['provider' => 'anthropic', 'model' => 'claude-catalog-test', 'usage' => anthropicTtlUsage(nested: false)])->usage,
+        genericCacheWriteDefinition(),
+    );
+
+    // 0.004096 input + 0.00018 cache read + 248 x 2.50 = 0.00062 write + 0.00503 output.
+    expect((string) $withSplit->cost?->amount)->toBe('0.009926')
+        ->and($withSplit->completeness)->toBe(CostCompleteness::Complete)
+        ->and($withSplit->missingUnits)->toBe([])
+        ->and($withSplit->cost?->toArray())->toBe($withoutSplit->cost?->toArray())
+        ->and($withoutSplit->completeness)->toBe(CostCompleteness::Complete);
+});
+
+it('settles the cache-write family once without double billing the split or guessing a TTL', function (array $units, ?string $amount, array $missing): void {
+    $definition = new PriceDefinition(
+        new ModelIdentity('anthropic', 'claude-family-test'),
+        [
+            'cache_write_input_tokens_5m' => new Rate('cache_write_input_tokens_5m', '5', '1000000'),
+            'cache_write_input_tokens_1h' => new Rate('cache_write_input_tokens_1h', '8', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+    $quote = (new CostCalculator)->calculate(new Usage($units), $definition);
+
+    expect($quote->cost === null ? null : (string) $quote->cost->amount)->toBe($amount)
+        ->and($quote->missingUnits)->toBe($missing);
+})->with([
+    'split covering the aggregate' => [['cache_write_input_tokens' => 300, 'cache_write_input_tokens_5m' => 200, 'cache_write_input_tokens_1h' => 100], '0.0018', []],
+    'split without an aggregate' => [['cache_write_input_tokens_5m' => 200], '0.001', []],
+    'aggregate larger than the split leaves an unknown-TTL remainder' => [['cache_write_input_tokens' => 350, 'cache_write_input_tokens_5m' => 200, 'cache_write_input_tokens_1h' => 100], '0.0018', ['cache_write_input_tokens']],
+    'aggregate smaller than the split bills the split' => [['cache_write_input_tokens' => 100, 'cache_write_input_tokens_5m' => 200, 'cache_write_input_tokens_1h' => 100], '0.0018', []],
+    'aggregate only' => [['cache_write_input_tokens' => 300], null, ['cache_write_input_tokens']],
+]);
+
+it('does not price a TTL subset at a generic rate unless the aggregate was reported', function (): void {
+    $quote = (new CostCalculator)->calculate(
+        new Usage(['cache_write_input_tokens_1h' => 100]),
+        genericCacheWriteDefinition(),
+    );
+
+    expect($quote->cost)->toBeNull()
+        ->and($quote->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($quote->missingUnits)->toBe(['cache_write_input_tokens_1h']);
+});
+
+/**
+ * A laravel/ai 1.0 Anthropic TextUsage: the inclusive input total and the
+ * cacheWriteInputTokens aggregate, with the TTL split dropped.
+ */
+function laravelAiAnthropicResponse(mixed $raw = null, mixed $steps = null): object
+{
+    return (object) [
+        'usage' => (object) [
+            'inputTokens' => 4096,
+            'outputTokens' => 503,
+            'cacheReadInputTokens' => 1800,
+            'cacheWriteInputTokens' => 248,
+            'reasoningTokens' => null,
+        ],
+        'meta' => (object) ['provider' => 'anthropic', 'model' => 'claude-sonnet-5-5-global-standard'],
+        'raw' => $raw,
+        'steps' => $steps,
+    ];
+}
+
+it('recovers the TTL split from a non-streamed laravel/ai Anthropic raw response', function (): void {
+    $raw = new HttpResponse(new Psr7Response(
+        body: (string) json_encode(['usage' => anthropicTtlUsage()]),
+        headers: ['Content-Type' => 'application/json'],
+    ));
+    $observation = (new LaravelAiObservationAdapter)->adapt(laravelAiAnthropicResponse(raw: $raw));
+    $quote = (new CostCalculator)->calculate($observation->usage, anthropicTtlBasis());
+
+    expect($observation->usage->toArray())->toMatchArray([
+        'input_tokens' => '2048',
+        'cached_input_tokens' => '1800',
+        'cache_write_input_tokens' => '248',
+        'cache_write_input_tokens_5m' => '148',
+        'cache_write_input_tokens_1h' => '100',
+    ])
+        ->and((string) $quote->cost?->amount)->toBe('0.010076')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete);
+});
+
+it('sums the TTL split across every laravel/ai step raw response', function (): void {
+    $steps = new Collection([
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['cache_creation' => ['ephemeral_5m_input_tokens' => 148, 'ephemeral_1h_input_tokens' => 0]]])],
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['cache_creation' => ['ephemeral_5m_input_tokens' => 0, 'ephemeral_1h_input_tokens' => 100]]])],
+    ]);
+    $finalStepOnly = new ProviderResponseFixture(['usage' => ['cache_creation' => ['ephemeral_5m_input_tokens' => 0, 'ephemeral_1h_input_tokens' => 100]]]);
+
+    $usage = (new LaravelAiObservationAdapter)->adapt(laravelAiAnthropicResponse(raw: $finalStepOnly, steps: $steps))->usage->toArray();
+
+    expect($usage)->toMatchArray([
+        'cache_write_input_tokens' => '248',
+        'cache_write_input_tokens_5m' => '148',
+        'cache_write_input_tokens_1h' => '100',
+    ]);
+});
+
+it('ignores a raw TTL split that cannot be attributed to the reported aggregate', function (mixed $raw, mixed $steps): void {
+    $usage = (new LaravelAiObservationAdapter)->adapt(laravelAiAnthropicResponse(raw: $raw, steps: $steps))->usage->toArray();
+
+    expect($usage)->toMatchArray(['cache_write_input_tokens' => '248'])
+        ->not->toHaveKey('cache_write_input_tokens_5m')
+        ->not->toHaveKey('cache_write_input_tokens_1h');
+})->with([
+    'streamed response without raw' => [null, null],
+    'final step raw only covers part of the aggregate' => [new ProviderResponseFixture(['usage' => ['cache_creation' => ['ephemeral_5m_input_tokens' => 0, 'ephemeral_1h_input_tokens' => 100]]]), null],
+    'one step without raw' => [null, [
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['cache_creation' => ['ephemeral_5m_input_tokens' => 148, 'ephemeral_1h_input_tokens' => 100]]])],
+        (object) ['raw' => null],
+    ]],
+    'non-integer split' => [new ProviderResponseFixture(['usage' => ['cache_creation' => ['ephemeral_5m_input_tokens' => '148', 'ephemeral_1h_input_tokens' => 100]]]), null],
+    'raw without a split' => [new ProviderResponseFixture(['usage' => ['cache_creation_input_tokens' => 248]]), null],
+]);

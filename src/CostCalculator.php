@@ -11,18 +11,46 @@ use Jkudish\LaravelAiPricing\ValueObjects\Money;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Jkudish\LaravelAiPricing\ValueObjects\PricingProvenance;
 use Jkudish\LaravelAiPricing\ValueObjects\PricingSnapshot;
+use Jkudish\LaravelAiPricing\ValueObjects\Rate;
 use Jkudish\LaravelAiPricing\ValueObjects\Usage;
 
 final class CostCalculator
 {
+    private const array CACHE_WRITE_FAMILY = [
+        'cache_write_input_tokens',
+        'cache_write_input_tokens_5m',
+        'cache_write_input_tokens_1h',
+    ];
+
     public function calculate(Usage $usage, PriceDefinition $pricing): CostQuote
     {
         $total = null;
         $missing = [];
         $outputFamilySettled = false;
+        $cacheWriteFamilySettled = false;
 
         foreach ($usage->toArray() as $unit => $quantity) {
             if ($usage->quantity($unit)->isZero()) {
+                continue;
+            }
+
+            if (in_array($unit, self::CACHE_WRITE_FAMILY, true)) {
+                if ($cacheWriteFamilySettled) {
+                    continue;
+                }
+
+                $cacheWriteFamilySettled = true;
+
+                [$lines, $missingUnits] = $this->settleCacheWriteFamily($usage, $pricing);
+
+                foreach ($lines as $line) {
+                    $total = $total instanceof Money ? $total->plus($line) : $line;
+                }
+
+                foreach ($missingUnits as $missingUnit) {
+                    $missing[] = $missingUnit;
+                }
+
                 continue;
             }
 
@@ -144,6 +172,76 @@ final class CostCalculator
             ];
         }
 
+        return $this->priceSegments($segments);
+    }
+
+    /**
+     * Settle the cache-write token family exactly once.
+     *
+     * cache_write_input_tokens is the aggregate count of input tokens written
+     * to a prompt cache. Anthropic additionally reports the same writes split
+     * by cache TTL, which the adapters map to cache_write_input_tokens_5m and
+     * cache_write_input_tokens_1h; the split is a partition of the aggregate,
+     * not additional usage, so the family never bills both.
+     *
+     * - When every reported TTL subset has a TTL-specific rate, the subsets
+     *   bill at those rates. Any aggregate remainder the split does not
+     *   account for has an unknown TTL and bills at the generic rate, or is
+     *   missing when no generic rate is published.
+     * - When a TTL subset has no rate but the observation also reported the
+     *   aggregate and the price publishes a generic cache-write rate, the
+     *   aggregate bills at that generic rate, exactly as it did before the
+     *   split was mapped.
+     * - Otherwise each subset bills at its own rate or is reported missing.
+     *
+     * A generic aggregate with no split therefore never satisfies a price
+     * that only publishes TTL-specific rates: it stays a missing unit, so the
+     * quote is partial instead of guessing which TTL was written.
+     *
+     * @return array{0: list<Money>, 1: list<string>}
+     */
+    private function settleCacheWriteFamily(Usage $usage, PriceDefinition $pricing): array
+    {
+        $aggregate = $usage->quantity('cache_write_input_tokens');
+        $fiveMinute = $usage->quantity('cache_write_input_tokens_5m');
+        $oneHour = $usage->quantity('cache_write_input_tokens_1h');
+        $split = $fiveMinute->plus($oneHour);
+        $genericRate = $pricing->rates['cache_write_input_tokens'] ?? null;
+        $fiveMinuteRate = $pricing->rates['cache_write_input_tokens_5m'] ?? null;
+        $oneHourRate = $pricing->rates['cache_write_input_tokens_1h'] ?? null;
+
+        if ($split->isZero()) {
+            return $this->priceSegments([
+                [$aggregate, $genericRate, 'cache_write_input_tokens'],
+            ]);
+        }
+
+        $splitPriced = ($fiveMinute->isZero() || $fiveMinuteRate !== null)
+            && ($oneHour->isZero() || $oneHourRate !== null);
+
+        if (! $splitPriced && ! $aggregate->isZero() && $genericRate !== null) {
+            return $this->priceSegments([
+                [$aggregate->compareTo($split) >= 0 ? $aggregate : $split, $genericRate, 'cache_write_input_tokens'],
+            ]);
+        }
+
+        $remainder = $aggregate->minus($split);
+
+        return $this->priceSegments([
+            [$fiveMinute, $fiveMinuteRate, 'cache_write_input_tokens_5m'],
+            [$oneHour, $oneHourRate, 'cache_write_input_tokens_1h'],
+            [$remainder->isNegative() ? BigDecimal::zero() : $remainder, $genericRate, 'cache_write_input_tokens'],
+        ]);
+    }
+
+    /**
+     * Price a family's segments, reporting each unpriced non-zero segment as missing.
+     *
+     * @param  list<array{0: BigDecimal, 1: Rate|null, 2: string}>  $segments
+     * @return array{0: list<Money>, 1: list<string>}
+     */
+    private function priceSegments(array $segments): array
+    {
         $lines = [];
         $missing = [];
 

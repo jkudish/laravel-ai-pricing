@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Jkudish\LaravelAiPricing\Adapters;
 
 use Brick\Math\BigDecimal;
+use Illuminate\Support\Enumerable;
 use InvalidArgumentException;
 use Jkudish\LaravelAiPricing\ValueObjects\PricingObservation;
 use Override;
+use Throwable;
 
 final class LaravelAiObservationAdapter implements ObservationAdapter
 {
@@ -93,6 +95,15 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
                     $usage['cache_creation_input_tokens'],
                     $usage['cacheCreationInputTokens'],
                 );
+
+                $split = $write > 0 && ! $this->reportsCacheWriteTtlSplit($usage)
+                    ? $this->rawCacheWriteTtlSplit($data)
+                    : null;
+
+                if ($split !== null && $write === $split['ephemeral_5m_input_tokens'] + $split['ephemeral_1h_input_tokens']) {
+                    $usage['cache_creation'] = $split;
+                }
+
                 $data['usage'] = $usage;
             }
         }
@@ -315,6 +326,90 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
         }
 
         return array_key_exists('inputTokens', $usage) || array_key_exists('input_tokens', $usage);
+    }
+
+    /** @param array<mixed, mixed> $usage */
+    private function reportsCacheWriteTtlSplit(array $usage): bool
+    {
+        return array_key_exists('cache_creation', $usage)
+            || array_key_exists('cache_write_input_tokens_5m', $usage)
+            || array_key_exists('cache_write_input_tokens_1h', $usage);
+    }
+
+    /**
+     * Recover Anthropic's TTL split of cache writes from the raw provider responses.
+     *
+     * laravel/ai normalizes Anthropic usage to a single cacheWriteInputTokens
+     * aggregate and drops usage.cache_creation, but a non-streamed response
+     * keeps the provider's HTTP response on its public raw property. A
+     * multi-step response sums every step's raw split, because the top-level
+     * raw response only describes the final step. Any step without a readable
+     * split, a streamed response, or a serialized response yields null; the
+     * caller also discards a split that does not sum to the reported
+     * aggregate, so the aggregate is never re-attributed by guesswork.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{ephemeral_5m_input_tokens: int, ephemeral_1h_input_tokens: int}|null
+     */
+    private function rawCacheWriteTtlSplit(array $data): ?array
+    {
+        $steps = data_get($data, 'steps');
+
+        if ($steps instanceof Enumerable) {
+            $steps = $steps->all();
+        }
+
+        if (is_iterable($steps)) {
+            $total = null;
+
+            foreach ($steps as $step) {
+                $split = $this->rawResponseTtlSplit(data_get($step, 'raw'));
+
+                if ($split === null) {
+                    return null;
+                }
+
+                $total = $total === null ? $split : [
+                    'ephemeral_5m_input_tokens' => $total['ephemeral_5m_input_tokens'] + $split['ephemeral_5m_input_tokens'],
+                    'ephemeral_1h_input_tokens' => $total['ephemeral_1h_input_tokens'] + $split['ephemeral_1h_input_tokens'],
+                ];
+            }
+
+            if ($total !== null) {
+                return $total;
+            }
+        }
+
+        return $this->rawResponseTtlSplit($data['raw'] ?? null);
+    }
+
+    /** @return array{ephemeral_5m_input_tokens: int, ephemeral_1h_input_tokens: int}|null */
+    private function rawResponseTtlSplit(mixed $raw): ?array
+    {
+        if (! is_object($raw) || ! is_callable([$raw, 'json'])) {
+            return null;
+        }
+
+        try {
+            $payload = $raw->json();
+        } catch (Throwable) {
+            return null;
+        }
+
+        $breakdown = is_array($payload) ? data_get($payload, 'usage.cache_creation') : null;
+
+        if (! is_array($breakdown)) {
+            return null;
+        }
+
+        $fiveMinute = $breakdown['ephemeral_5m_input_tokens'] ?? 0;
+        $oneHour = $breakdown['ephemeral_1h_input_tokens'] ?? 0;
+
+        if (! is_int($fiveMinute) || ! is_int($oneHour) || $fiveMinute < 0 || $oneHour < 0) {
+            return null;
+        }
+
+        return ['ephemeral_5m_input_tokens' => $fiveMinute, 'ephemeral_1h_input_tokens' => $oneHour];
     }
 
     private function mappedDriver(string $provider): ?string
