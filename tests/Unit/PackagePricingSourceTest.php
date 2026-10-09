@@ -525,6 +525,24 @@ it('points every snapshot alias at a priced identity and never at another alias'
     }
 });
 
+it('never prices a fallback-blocked identity or points an alias at one', function (): void {
+    $snapshot = packagePricingSnapshot();
+    $blocked = $snapshot['fallback_blocked'] ?? [];
+
+    // The two bounded OpenRouter bases are priced and also fallback-blocked on
+    // purpose (0.2.0), so that only this snapshot or a configured override can
+    // ever price them. Every other blocked identity, including each generic
+    // identity that cannot select a billing tier, must stay unpriced.
+    $pinnedBases = ['openrouter:openai/gpt-5.6-terra-272k', 'openrouter:openai/gpt-6-luna-272k'];
+
+    expect($blocked)->not->toBeEmpty()
+        ->and(array_values(array_intersect($blocked, array_keys($snapshot['prices']))))->toBe($pinnedBases);
+
+    foreach ($snapshot['aliases'] ?? [] as $alias => $target) {
+        expect(in_array($target, $blocked, true))->toBeFalse("Alias [{$alias}] targets the fallback-blocked identity [{$target}].");
+    }
+});
+
 it('keeps unreviewed Jev versions and bare model names unpriced', function (string $model): void {
     expect(packagePricingSource()->find(new ModelIdentity('typesafe', $model)))->toBeNull();
 })->with(['jev-1.14.0', 'jev-2.0.0', 'jev', 'jev-1.13']);
