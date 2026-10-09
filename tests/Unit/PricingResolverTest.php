@@ -249,3 +249,62 @@ it('does not attribute catalog pricing in another currency', function (PricingSo
     expect($resolver->resolve(new PricingObservation($identity, Usage::tokens(1, 0)))->completeness)
         ->toBe(CostCompleteness::Unavailable);
 })->with([PricingSource::Configured, PricingSource::ProviderNative, PricingSource::Portkey]);
+
+it('keeps a snapshot-blocked OpenRouter identity away from the live native catalog and the fallback', function (): void {
+    $identity = new ModelIdentity('openrouter', 'google/gemini-3.1-flash-lite');
+    $resolver = new PricingResolver(
+        configured: catalog(null),
+        native: catalog(price($identity, PricingSource::ProviderNative, '0.25')),
+        fallback: catalog(price($identity, PricingSource::Portkey, '0.25')),
+        snapshot: packageFallbackPolicy(),
+    );
+
+    $quote = $resolver->resolve(new PricingObservation($identity, new Usage(['input_tokens' => 1])));
+
+    expect($quote->cost)->toBeNull()
+        ->and($quote->completeness)->toBe(CostCompleteness::Unavailable);
+});
+
+it('still prices a snapshot-blocked identity from configured or observation-attached pricing', function (): void {
+    $identity = new ModelIdentity('openrouter', 'google/gemini-3.1-flash-lite');
+    $usage = new Usage(['input_tokens' => 1]);
+    $configured = new PricingResolver(
+        configured: catalog(price($identity, PricingSource::Configured, '0.3')),
+        native: catalog(price($identity, PricingSource::ProviderNative, '0.25')),
+        fallback: catalog(null),
+        snapshot: packageFallbackPolicy(),
+    );
+    $attached = new PricingResolver(
+        configured: catalog(null),
+        native: catalog(price($identity, PricingSource::ProviderNative, '0.25')),
+        fallback: catalog(null),
+        snapshot: packageFallbackPolicy(),
+    );
+
+    $configuredQuote = $configured->resolve(new PricingObservation($identity, $usage));
+    $attachedQuote = $attached->resolve(new PricingObservation(
+        $identity,
+        $usage,
+        providerNativePricing: price($identity, PricingSource::ProviderNative, '0.275'),
+    ));
+
+    expect((string) $configuredQuote->cost?->amount)->toBe('0.3')
+        ->and($configuredQuote->source)->toBe(PricingSource::Configured)
+        ->and((string) $attachedQuote->cost?->amount)->toBe('0.275')
+        ->and($attachedQuote->source)->toBe(PricingSource::ProviderNative);
+});
+
+it('still uses the live native catalog for an OpenRouter identity the snapshot does not block', function (): void {
+    $identity = new ModelIdentity('openrouter', 'google/gemini-3.1-flash-lite-preview');
+    $resolver = new PricingResolver(
+        configured: catalog(null),
+        native: catalog(price($identity, PricingSource::ProviderNative, '0.25')),
+        fallback: catalog(null),
+        snapshot: packageFallbackPolicy(),
+    );
+
+    $quote = $resolver->resolve(new PricingObservation($identity, new Usage(['input_tokens' => 1])));
+
+    expect((string) $quote->cost?->amount)->toBe('0.25')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete);
+});

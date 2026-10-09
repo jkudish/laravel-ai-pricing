@@ -343,6 +343,7 @@ it('keeps unspecified routing and retired eval identities unavailable instead of
     ['deepseek', 'deepseek-v4-pro'],
     ['deepseek', 'deepseek-v4-flash'],
     ['deepseek', 'deepseek-v4-flash-vision-exp'],
+    ['openrouter', 'google/gemini-3.1-flash-lite'],
 ]);
 
 it('does not turn missing or unknown DataForSEO usage into a complete or zero quote', function (string $sku): void {

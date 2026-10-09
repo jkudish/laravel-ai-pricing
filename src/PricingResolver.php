@@ -43,13 +43,15 @@ final readonly class PricingResolver implements CostResolver
 
         $pricing = $this->configured->find($observation->identity);
 
+        $remoteCatalogsAllowed = $this->allowsRemoteCatalogs($observation);
+
         if ($pricing === null) {
             $pricing = $observation->providerNativePricing
-                ?? $this->native->find($observation->identity)
+                ?? ($remoteCatalogsAllowed ? $this->native->find($observation->identity) : null)
                 ?? $this->snapshot?->find($observation->identity);
         }
 
-        if ($pricing === null && $this->allowsFallback($observation)) {
+        if ($pricing === null && $remoteCatalogsAllowed) {
             $pricing = $this->fallback->find($observation->identity);
         }
 
@@ -64,7 +66,17 @@ final readonly class PricingResolver implements CostResolver
         return $this->calculator->calculate($observation->usage, $pricing);
     }
 
-    private function allowsFallback(PricingObservation $observation): bool
+    /**
+     * Decide whether remote catalogs may price the observed identity.
+     *
+     * An identity the snapshot's fallback policy blocks is one whose billed
+     * rate a remote catalog cannot select safely: an ambiguous generic model,
+     * a configured-only SKU, or a deliberately bound basis. Such an identity
+     * skips both the remote native catalog and the fallback catalog, so only
+     * provider-reported cost, configured prices, pricing attached to the
+     * observation, or the reviewed snapshot can price it.
+     */
+    private function allowsRemoteCatalogs(PricingObservation $observation): bool
     {
         return ! $this->snapshot instanceof FallbackPolicy
             || $this->snapshot->allowsFallback($observation->identity);
