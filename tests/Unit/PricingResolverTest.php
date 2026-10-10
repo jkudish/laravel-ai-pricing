@@ -130,17 +130,25 @@ it('uses the complete global-routing Claude snapshot before fallback and exposes
         $identity,
         new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000]),
     ));
-    $partial = $resolver->resolve(new PricingObservation(
+    $oneHourWrite = $resolver->resolve(new PricingObservation(
         $identity,
         new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000, 'cache_write_input_tokens_1h' => 1]),
     ));
+    $partial = $resolver->resolve(new PricingObservation(
+        $identity,
+        new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000, 'cache_write_input_tokens' => 1]),
+    ));
 
+    // 1M x 2/M + 64k x 10/M = 2.64; one 1-hour cache write adds 4/M = 0.000004.
     expect((string) $complete->cost?->amount)->toBe('2.64')
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
+        ->and((string) $oneHourWrite->cost?->amount)->toBe('2.640004')
+        ->and($oneHourWrite->completeness)->toBe(CostCompleteness::Complete)
+        // An aggregate write without a TTL split stays missing on the TTL-only basis.
         ->and((string) $partial->cost?->amount)->toBe('2.64')
         ->and($partial->completeness)->toBe(CostCompleteness::Partial)
-        ->and($partial->missingUnits)->toBe(['cache_write_input_tokens_1h']);
+        ->and($partial->missingUnits)->toBe(['cache_write_input_tokens']);
 });
 
 it('does not resolve generic or US-only Claude identities to the cheaper global rate', function (string $sku): void {

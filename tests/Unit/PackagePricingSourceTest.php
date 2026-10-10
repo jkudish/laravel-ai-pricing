@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use Brick\Math\BigDecimal;
 use Jkudish\LaravelAiPricing\CostCalculator;
 use Jkudish\LaravelAiPricing\Enums\CostCompleteness;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
+use Jkudish\LaravelAiPricing\Facades\AiPricing;
 use Jkudish\LaravelAiPricing\Sources\PackagePricingSource;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\Usage;
@@ -31,7 +33,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-09')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-10')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -65,21 +67,35 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
 it('quotes Claude Sonnet 5 global routing exactly and leaves undeclared billed units missing', function (): void {
     $definition = packagePricingSource()->find(new ModelIdentity('anthropic', 'claude-sonnet-5-global'));
     $complete = (new CostCalculator)->calculate(
-        new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000]),
+        new Usage([
+            'input_tokens' => 1_000_000,
+            'output_tokens' => 64_000,
+            'cached_input_tokens' => 500_000,
+            'cache_write_input_tokens' => 300_000,
+            'cache_write_input_tokens_5m' => 200_000,
+            'cache_write_input_tokens_1h' => 100_000,
+            'web_searches' => 1,
+        ]),
         $definition,
     );
     $partial = (new CostCalculator)->calculate(
-        new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000, 'web_searches' => 1]),
+        new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 64_000, 'cache_write_input_tokens' => 300_000]),
         $definition,
     );
 
-    expect((string) $complete->cost?->amount)->toBe('2.64')
+    // Sonnet 5 standard price: 2/M input, 10/M output, cache reads at 0.1x
+    // input (0.20/M), 5-minute writes at 1.25x (2.50/M), 1-hour writes at 2x
+    // (4/M) and USD 10 per 1,000 searches:
+    // 2 + 0.64 + 0.1 + 0.5 + 0.4 + 0.01 = 3.65.
+    expect((string) $complete->cost?->amount)->toBe('3.65')
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe('https://platform.claude.com/docs/en/about-claude/pricing')
+        // A cache-write aggregate with no TTL split cannot choose a rate:
+        // 2 + 0.64 = 2.64 with the write missing.
         ->and((string) $partial->cost?->amount)->toBe('2.64')
         ->and($partial->completeness)->toBe(CostCompleteness::Partial)
-        ->and($partial->missingUnits)->toBe(['web_searches']);
+        ->and($partial->missingUnits)->toBe(['cache_write_input_tokens']);
 });
 
 it('quotes the OpenRouter bounded basis exactly and keeps generic or native-search units fail-closed', function (): void {
@@ -224,13 +240,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T10:27:30+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-10T01:47:24+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T10:27:30+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-10T01:47:24+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -250,8 +266,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(11)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-09T10:27:30+00:00')
+    expect($snapshot['version'])->toBe(12)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-10T01:47:24+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -270,7 +286,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-09)\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10))\./');
     }
 });
 
@@ -301,7 +317,7 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-09T10:27:30+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-10T01:47:24+00:00')
         ->and($definition->effectiveAt)->toBeNull()
         ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain('Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
@@ -344,6 +360,29 @@ it('keeps unspecified routing and retired eval identities unavailable instead of
     ['deepseek', 'deepseek-v4-flash'],
     ['deepseek', 'deepseek-v4-flash-vision-exp'],
     ['openrouter', 'google/gemini-3.1-flash-lite'],
+    ['anthropic', 'claude-fable-5-1'],
+    ['anthropic', 'claude-opus-4-8'],
+    ['gemini', 'gemini-3.8-flash'],
+    ['gemini', 'gemini-2.5-pro'],
+    ['gemini', 'gemini-flash-latest'],
+    ['openai', 'gpt-4o'],
+    ['openai', 'gpt-4.1'],
+    ['openai', 'gpt-4o-2024-08-06'],
+    ['openai', 'gpt-5.6-cyber'],
+    ['openai', 'gpt-5-search-api'],
+    ['deepseek', 'deepseek-flash'],
+    ['dashscope', 'qwen3.7-plus'],
+    ['dashscope', 'qwen-plus-2025-12-01'],
+    ['openrouter', 'anthropic/claude-opus-5.5'],
+    ['openrouter', 'google/gemini-3.1-pro-preview'],
+    ['openrouter', 'google/gemini-2.5-pro'],
+    ['openrouter', 'openai/gpt-5.6-terra'],
+    ['openrouter', 'openai/gpt-6-luna'],
+    ['openrouter', 'openai/gpt-oss-120b'],
+    ['openrouter', 'deepseek/deepseek-v4-pro-0813'],
+    ['openrouter', 'qwen/qwen3.7-plus'],
+    ['openrouter', 'moonshotai/kimi-k3'],
+    ['openrouter', 'z-ai/glm-5.3'],
 ]);
 
 it('does not turn missing or unknown DataForSEO usage into a complete or zero quote', function (string $sku): void {
@@ -576,14 +615,96 @@ it('keeps every fallback-blocked identity unpriced unless it is an allowlisted b
     // Rule: a fallback-blocked identity is either unpriced (a generic identity
     // that cannot select a billing tier, or a configured-only/unavailable SKU)
     // or a deliberately bound basis named on this allowlist. The bounded
-    // OpenRouter -272k bases (since 0.2.0) and the Gemini 3.1 Flash Lite
-    // worst-case routing basis are priced and fallback-blocked so that only
-    // this reviewed snapshot or an explicit configured override can price them. The overlap must equal this list exactly, so any new
+    // OpenRouter -272k bases (since 0.2.0), the -standard-max worst-case
+    // routing bases and the Gemini 3.1 Pro -standard-short/-long bases are
+    // priced and fallback-blocked so that only this reviewed snapshot or an
+    // explicit configured override can price them. The overlap must equal
+    // this list exactly, in fallback_blocked order, so any new
     // priced-and-blocked identity fails until it is added here on purpose.
     $boundBasesAllowlist = [
         'openrouter:openai/gpt-5.6-terra-272k',
         'openrouter:openai/gpt-6-luna-272k',
         'openrouter:google/gemini-3.1-flash-lite-standard-max',
+        'openrouter:anthropic/claude-fable-5-standard-max',
+        'openrouter:anthropic/claude-opus-5.5-standard-max',
+        'openrouter:anthropic/claude-opus-5-standard-max',
+        'openrouter:anthropic/claude-opus-4.8-standard-max',
+        'openrouter:anthropic/claude-opus-4.7-standard-max',
+        'openrouter:anthropic/claude-opus-4.6-standard-max',
+        'openrouter:anthropic/claude-opus-4.5-standard-max',
+        'openrouter:anthropic/claude-sonnet-5.5-standard-max',
+        'openrouter:anthropic/claude-sonnet-5-standard-max',
+        'openrouter:anthropic/claude-sonnet-4.6-standard-max',
+        'openrouter:anthropic/claude-haiku-4.5-standard-max',
+        'openrouter:anthropic/claude-haiku-5.5-standard-short-max',
+        'openrouter:anthropic/claude-haiku-5.5-standard-long-max',
+        'openrouter:google/gemini-3.6-flash-standard-max-2026',
+        'openrouter:google/gemini-3.5-flash-lite-standard-max',
+        'openrouter:google/gemini-3.1-pro-preview-standard-short',
+        'openrouter:google/gemini-3.1-pro-preview-standard-long',
+        'openrouter:google/gemini-3.1-pro-preview-customtools-standard-short',
+        'openrouter:google/gemini-3.1-pro-preview-customtools-standard-long',
+        'openrouter:openai/gpt-6.1-sol-standard-max-short',
+        'openrouter:openai/gpt-6.1-sol-standard-max-long',
+        'openrouter:openai/gpt-6.1-sol-pro-standard-max-short',
+        'openrouter:openai/gpt-6.1-sol-pro-standard-max-long',
+        'openrouter:openai/gpt-6-astra-standard-max-short',
+        'openrouter:openai/gpt-6-astra-standard-max-long',
+        'openrouter:openai/gpt-6-astra-pro-standard-max-short',
+        'openrouter:openai/gpt-6-astra-pro-standard-max-long',
+        'openrouter:openai/gpt-6-sol-standard-max-short',
+        'openrouter:openai/gpt-6-sol-standard-max-long',
+        'openrouter:openai/gpt-6-sol-pro-standard-max-short',
+        'openrouter:openai/gpt-6-sol-pro-standard-max-long',
+        'openrouter:openai/gpt-6-luna-standard-max-short',
+        'openrouter:openai/gpt-6-luna-standard-max-long',
+        'openrouter:openai/gpt-6-luna-pro-standard-max-short',
+        'openrouter:openai/gpt-6-luna-pro-standard-max-long',
+        'openrouter:openai/gpt-5.6-sol-standard-max-short',
+        'openrouter:openai/gpt-5.6-sol-standard-max-long',
+        'openrouter:openai/gpt-5.6-sol-pro-standard-max-short',
+        'openrouter:openai/gpt-5.6-sol-pro-standard-max-long',
+        'openrouter:openai/gpt-5.6-terra-standard-max-short',
+        'openrouter:openai/gpt-5.6-terra-standard-max-long',
+        'openrouter:openai/gpt-5.6-terra-pro-standard-max-short',
+        'openrouter:openai/gpt-5.6-terra-pro-standard-max-long',
+        'openrouter:openai/gpt-5.6-luna-standard-max-short',
+        'openrouter:openai/gpt-5.6-luna-standard-max-long',
+        'openrouter:openai/gpt-5.6-luna-pro-standard-max-short',
+        'openrouter:openai/gpt-5.6-luna-pro-standard-max-long',
+        'openrouter:openai/gpt-5.5-standard-max-short',
+        'openrouter:openai/gpt-5.5-standard-max-long',
+        'openrouter:openai/gpt-5.4-standard-max-short',
+        'openrouter:openai/gpt-5.4-standard-max-long',
+        'openrouter:openai/gpt-5.4-mini-standard-max',
+        'openrouter:openai/gpt-4.1-standard-max',
+        'openrouter:openai/gpt-4.1-mini-standard-max',
+        'openrouter:openai/gpt-4o-mini-standard-max',
+        'openrouter:deepseek/deepseek-v4.1-flash-standard-max',
+        'openrouter:deepseek/deepseek-v4-pro-0813-standard-max',
+        'openrouter:deepseek/deepseek-v4-pro-standard-max',
+        'openrouter:deepseek/deepseek-v4-flash-standard-max',
+        'openrouter:deepseek/deepseek-v4-flash-0731-standard-max',
+        'openrouter:deepseek/deepseek-v3.2-standard-max',
+        'openrouter:qwen/qwen3.7-plus-standard-max',
+        'openrouter:qwen/qwen3.7-max-standard-max',
+        'openrouter:qwen/qwen3.7-flash-standard-max',
+        'openrouter:qwen/qwen3.8-2.4t-a95b-standard-max',
+        'openrouter:qwen/qwen3.8-27b-standard-max',
+        'openrouter:qwen/qwen3-coder-flash-standard-max',
+        'openrouter:qwen/qwen3-coder-standard-max',
+        'openrouter:qwen/qwen-plus-standard-max',
+        'openrouter:moonshotai/kimi-k3-standard-max',
+        'openrouter:moonshotai/kimi-k2.7-code-standard-max',
+        'openrouter:moonshotai/kimi-k2.6-standard-max',
+        'openrouter:z-ai/glm-5.3-standard-max',
+        'openrouter:z-ai/glm-5.3-flash-standard-max',
+        'openrouter:z-ai/glm-5.2-standard-max',
+        'openrouter:z-ai/glm-5.1-standard-max',
+        'openrouter:z-ai/glm-5-standard-max',
+        'openrouter:z-ai/glm-4.7-standard-max',
+        'openrouter:z-ai/glm-4.6-standard-max',
+        'openrouter:z-ai/glm-4.5-air-standard-max',
     ];
 
     expect($blocked)->not->toBeEmpty()
@@ -604,3 +725,365 @@ it('resolves an alias whose target is not priced to nothing instead of a guess',
 
     expect((new PackagePricingSource($snapshot))->find(new ModelIdentity('typesafe', 'jev-latest')))->toBeNull();
 });
+
+/**
+ * Read a snapshot basis as USD per million tokens, or USD per search for web_searches.
+ *
+ * @return array<string, BigDecimal>
+ */
+function basisPrices(string $key): array
+{
+    [$provider, $model] = explode(':', $key, 2);
+    $definition = packagePricingSource()->find(new ModelIdentity($provider, $model));
+    expect($definition)->not->toBeNull("[{$key}] is not priced.");
+    assert($definition !== null);
+
+    $prices = [];
+    foreach ($definition->rates as $unit => $rate) {
+        $prices[$unit] = $rate->cost(BigDecimal::of($unit === 'web_searches' ? 1 : 1_000_000))->amount;
+    }
+
+    return $prices;
+}
+
+/** @param array<string, string|BigDecimal> $expected */
+function expectBasisPrices(string $key, array $expected): void
+{
+    $actual = basisPrices($key);
+    $rates = packagePricingSnapshot()['prices'][$key]['rates'];
+
+    expect(array_keys($actual))->toEqualCanonicalizing(array_keys($expected), "[{$key}] publishes other units.")
+        ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toStartWith('Checked 2026-10-10.')
+        ->and(packagePricingSnapshot()['prices'][$key]['source'])->toStartWith('https://');
+
+    foreach ($expected as $unit => $price) {
+        expect($rates[$unit]['amount'])->toBeString()
+            ->and($rates[$unit]['per'])->toBeString()
+            ->and($actual[$unit]->isEqualTo($price))->toBeTrue("[{$key}] {$unit}: expected {$price}, got {$actual[$unit]}.");
+    }
+}
+
+/**
+ * Scale every token rate of a basis, keeping per-search prices as published.
+ *
+ * @return array<string, BigDecimal>
+ */
+function scaledTokenPrices(string $key, string $factor): array
+{
+    $prices = basisPrices($key);
+    unset($prices['web_searches']);
+
+    return array_map(static fn (BigDecimal $price): BigDecimal => $price->multipliedBy($factor), $prices);
+}
+
+it('prices each native Claude basis at its list rate with 1.25x and 2x TTL cache writes', function (string $key, string $input, string $output, string $cacheRead): void {
+    expectBasisPrices($key, [
+        'input_tokens' => $input,
+        'output_tokens' => $output,
+        'cached_input_tokens' => $cacheRead,
+        'cache_write_input_tokens_5m' => BigDecimal::of($input)->multipliedBy('1.25'),
+        'cache_write_input_tokens_1h' => BigDecimal::of($input)->multipliedBy(2),
+        'web_searches' => '0.01',
+    ]);
+})->with([
+    ['anthropic:claude-fable-5-1-global', '10', '50', '0.25'],
+    ['anthropic:claude-mythos-5-1-global', '10', '50', '0.25'],
+    ['anthropic:claude-fable-5-global', '10', '50', '1'],
+    ['anthropic:claude-mythos-5-global', '10', '50', '1'],
+    ['anthropic:claude-opus-5-global-standard', '5', '25', '0.5'],
+    ['anthropic:claude-opus-4-8-global-standard', '5', '25', '0.5'],
+    ['anthropic:claude-opus-4-7-global', '5', '25', '0.5'],
+    ['anthropic:claude-opus-4-6-global', '5', '25', '0.5'],
+    ['anthropic:claude-opus-4-5-20251101', '5', '25', '0.5'],
+    ['anthropic:claude-sonnet-5-global', '2', '10', '0.2'],
+    ['anthropic:claude-sonnet-4-6-global', '3', '15', '0.3'],
+    ['anthropic:claude-haiku-4-5-20251001', '1', '5', '0.1'],
+]);
+
+it('prices each OpenRouter Claude bound basis at 1.1x the global list rate', function (string $basis, string $native): void {
+    expectBasisPrices($basis, [...scaledTokenPrices($native, '1.1'), 'web_searches' => '0.01']);
+
+    expect(packagePricingSource()->allowsFallback(new ModelIdentity('openrouter', substr($basis, 11))))->toBeFalse();
+})->with([
+    ['openrouter:anthropic/claude-fable-5-standard-max', 'anthropic:claude-fable-5-global'],
+    ['openrouter:anthropic/claude-opus-5.5-standard-max', 'anthropic:claude-opus-5-5-global-standard'],
+    ['openrouter:anthropic/claude-opus-5-standard-max', 'anthropic:claude-opus-5-global-standard'],
+    ['openrouter:anthropic/claude-opus-4.8-standard-max', 'anthropic:claude-opus-4-8-global-standard'],
+    ['openrouter:anthropic/claude-opus-4.7-standard-max', 'anthropic:claude-opus-4-7-global'],
+    ['openrouter:anthropic/claude-opus-4.6-standard-max', 'anthropic:claude-opus-4-6-global'],
+    ['openrouter:anthropic/claude-opus-4.5-standard-max', 'anthropic:claude-opus-4-5-20251101'],
+    ['openrouter:anthropic/claude-sonnet-5.5-standard-max', 'anthropic:claude-sonnet-5-5-global-standard'],
+    ['openrouter:anthropic/claude-sonnet-5-standard-max', 'anthropic:claude-sonnet-5-global'],
+    ['openrouter:anthropic/claude-sonnet-4.6-standard-max', 'anthropic:claude-sonnet-4-6-global'],
+    ['openrouter:anthropic/claude-haiku-4.5-standard-max', 'anthropic:claude-haiku-4-5-20251001'],
+    ['openrouter:anthropic/claude-haiku-5.5-standard-short-max', 'anthropic:claude-haiku-5-5-global-short'],
+    ['openrouter:anthropic/claude-haiku-5.5-standard-long-max', 'anthropic:claude-haiku-5-5-global-long'],
+]);
+
+it('prices each native Gemini basis with 0.1x cache reads and per-query search only from Gemini 3', function (string $key, string $input, string $output, bool $search): void {
+    $expected = [
+        'input_tokens' => $input,
+        'output_tokens' => $output,
+        'cached_input_tokens' => BigDecimal::of($input)->multipliedBy('0.1'),
+    ];
+
+    if ($search) {
+        $expected['web_searches'] = '0.014';
+    }
+
+    expectBasisPrices($key, $expected);
+})->with([
+    ['gemini:gemini-3.8-flash-standard-2026', '0.75', '3.75', true],
+    ['gemini:gemini-3.8-flash-standard-2027', '1.50', '7.50', true],
+    ['gemini:gemini-3.6-flash-standard-2026', '0.75', '3.75', true],
+    ['gemini:gemini-3.6-flash-standard-2027', '1.50', '7.50', true],
+    ['gemini:gemini-3.5-flash-lite-standard', '0.30', '2.50', true],
+    ['gemini:gemini-3.1-flash-lite-standard', '0.25', '1.50', true],
+    ['gemini:gemini-3.1-pro-preview-standard-short', '2', '12', true],
+    ['gemini:gemini-3.1-pro-preview-standard-long', '4', '18', true],
+    ['gemini:gemini-3.1-pro-preview-customtools-standard-short', '2', '12', true],
+    ['gemini:gemini-3.1-pro-preview-customtools-standard-long', '4', '18', true],
+    ['gemini:gemini-3-flash-preview-standard', '0.50', '3', true],
+    ['gemini:gemini-2.5-pro-standard-short', '1.25', '10', false],
+    ['gemini:gemini-2.5-pro-standard-long', '2.50', '15', false],
+    ['gemini:gemini-2.5-flash-standard', '0.30', '2.50', false],
+    ['gemini:gemini-2.5-flash-lite-standard', '0.10', '0.40', false],
+]);
+
+it('prices each OpenRouter Gemini bound basis from the direct rate and its routing uplift', function (string $basis, string $native, string $uplift): void {
+    expectBasisPrices($basis, [...scaledTokenPrices($native, $uplift), 'web_searches' => '0.014']);
+})->with([
+    'regional Vertex 1.1x' => ['openrouter:google/gemini-3.6-flash-standard-max-2026', 'gemini:gemini-3.6-flash-standard-2026', '1.1'],
+    'regional Vertex 1.1x lite' => ['openrouter:google/gemini-3.5-flash-lite-standard-max', 'gemini:gemini-3.5-flash-lite-standard', '1.1'],
+    'global only, short' => ['openrouter:google/gemini-3.1-pro-preview-standard-short', 'gemini:gemini-3.1-pro-preview-standard-short', '1'],
+    'global only, long' => ['openrouter:google/gemini-3.1-pro-preview-standard-long', 'gemini:gemini-3.1-pro-preview-standard-long', '1'],
+    'customtools, short' => ['openrouter:google/gemini-3.1-pro-preview-customtools-standard-short', 'gemini:gemini-3.1-pro-preview-customtools-standard-short', '1'],
+    'customtools, long' => ['openrouter:google/gemini-3.1-pro-preview-customtools-standard-long', 'gemini:gemini-3.1-pro-preview-customtools-standard-long', '1'],
+]);
+
+it('prices each native OpenAI basis from its input and output rates and published cache multipliers', function (string $key, string $input, string $output, ?string $cacheRead, ?string $cacheWrite, bool $search): void {
+    $expected = ['input_tokens' => $input, 'output_tokens' => $output];
+
+    if ($cacheRead !== null) {
+        $expected['cached_input_tokens'] = BigDecimal::of($input)->multipliedBy($cacheRead);
+    }
+
+    // GPT-5.6 and later bill cache writes at 1.25x input; earlier models have
+    // no write surcharge, so a written token bills once at the input rate.
+    if ($cacheWrite !== null) {
+        $expected['cache_write_input_tokens'] = BigDecimal::of($input)->multipliedBy($cacheWrite);
+    }
+
+    if ($search) {
+        $expected['web_searches'] = '0.01';
+    }
+
+    expectBasisPrices($key, $expected);
+})->with([
+    ['openai:gpt-6-astra-standard-short', '10', '50', '0.1', '1.25', true],
+    ['openai:gpt-6-astra-standard-long', '20', '75', '0.1', '1.25', true],
+    ['openai:gpt-6-sol-standard-short', '2', '10', '0.1', '1.25', true],
+    ['openai:gpt-6-sol-standard-long', '4', '15', '0.1', '1.25', true],
+    ['openai:gpt-5.6-sol-standard-short', '4', '20', '0.1', '1.25', true],
+    ['openai:gpt-5.6-sol-standard-long', '8', '30', '0.1', '1.25', true],
+    ['openai:gpt-5.6-terra-standard-short', '2', '12', '0.1', '1.25', true],
+    ['openai:gpt-5.6-terra-standard-long', '4', '18', '0.1', '1.25', true],
+    ['openai:gpt-5.6-luna-standard-short', '0.20', '1.20', '0.1', '1.25', true],
+    ['openai:gpt-5.6-luna-standard-long', '0.40', '1.80', '0.1', '1.25', true],
+    ['openai:gpt-5.5-standard-short', '5', '30', '0.1', '1', true],
+    ['openai:gpt-5.5-standard-long', '10', '45', '0.1', '1', true],
+    ['openai:gpt-5.5-pro-standard-short', '30', '180', null, null, true],
+    ['openai:gpt-5.5-pro-standard-long', '60', '270', null, null, true],
+    ['openai:gpt-5.4-standard-short', '2.50', '15', '0.1', '1', true],
+    ['openai:gpt-5.4-standard-long', '5', '22.50', '0.1', '1', true],
+    ['openai:gpt-5.4-pro-standard-short', '30', '180', null, null, true],
+    ['openai:gpt-5.4-pro-standard-long', '60', '270', null, null, true],
+    ['openai:gpt-5.4-mini-standard', '0.75', '4.50', '0.1', '1', true],
+    ['openai:gpt-5.2-standard', '1.75', '14', '0.1', '1', true],
+    ['openai:gpt-5.2-pro-standard', '21', '168', null, null, true],
+    ['openai:gpt-4.1-standard', '2', '8', '0.25', '1', false],
+    ['openai:gpt-4.1-mini-standard', '0.40', '1.60', '0.25', '1', false],
+    ['openai:gpt-4o-standard', '2.50', '10', '0.5', '1', false],
+    ['openai:gpt-4o-mini-standard', '0.15', '0.60', '0.5', '1', false],
+    ['openai:chat-latest-standard', '5', '30', '0.1', '1', false],
+]);
+
+it('prices each OpenRouter OpenAI bound basis at 1.1x the direct standard rate', function (string $basis, string $native, bool $cacheWrite, bool $search): void {
+    $expected = scaledTokenPrices($native, '1.1');
+
+    // OpenRouter bills pre-GPT-5.6 cache writes at no cost while OpenAI bills
+    // them at the input rate, so those bases leave the write unpriced.
+    if (! $cacheWrite) {
+        unset($expected['cache_write_input_tokens']);
+    }
+
+    if ($search) {
+        $expected['web_searches'] = '0.01';
+    }
+
+    expectBasisPrices($basis, $expected);
+})->with(function (): array {
+    $rows = [];
+
+    foreach (['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'] as $model) {
+        foreach (['', '-pro'] as $variant) {
+            foreach (['short', 'long'] as $tier) {
+                $rows[] = ["openrouter:openai/{$model}{$variant}-standard-max-{$tier}", "openai:{$model}-standard-{$tier}", true, true];
+            }
+        }
+    }
+
+    foreach (['gpt-5.5', 'gpt-5.4'] as $model) {
+        foreach (['short', 'long'] as $tier) {
+            $rows[] = ["openrouter:openai/{$model}-standard-max-{$tier}", "openai:{$model}-standard-{$tier}", false, true];
+        }
+    }
+
+    $rows[] = ['openrouter:openai/gpt-5.4-mini-standard-max', 'openai:gpt-5.4-mini-standard', false, true];
+    $rows[] = ['openrouter:openai/gpt-4.1-standard-max', 'openai:gpt-4.1-standard', false, false];
+    $rows[] = ['openrouter:openai/gpt-4.1-mini-standard-max', 'openai:gpt-4.1-mini-standard', false, false];
+    $rows[] = ['openrouter:openai/gpt-4o-mini-standard-max', 'openai:gpt-4o-mini-standard', false, false];
+
+    return $rows;
+});
+
+it('prices DeepSeek off-peak bases at half the peak rate', function (string $offPeak, string $peak): void {
+    expectBasisPrices($offPeak, scaledTokenPrices($peak, '0.5'));
+})->with([
+    ['deepseek:deepseek-flash-off-peak', 'deepseek:deepseek-flash-peak'],
+    ['deepseek:deepseek-v4-pro-off-peak', 'deepseek:deepseek-v4-pro-peak'],
+]);
+
+it('prices each direct DeepSeek, Z.ai and Kimi basis at its list rates', function (string $key, array $expected): void {
+    expectBasisPrices($key, $expected);
+})->with([
+    ['deepseek:deepseek-flash-peak', ['input_tokens' => '0.3', 'cached_input_tokens' => '0.006', 'output_tokens' => '1.2']],
+    ['zai:glm-5.3-flashx', ['input_tokens' => '0.37', 'cached_input_tokens' => '0.075', 'output_tokens' => '1.25']],
+    ['zai:glm-5.2', ['input_tokens' => '1.4', 'cached_input_tokens' => '0.26', 'output_tokens' => '4.4']],
+    ['zai:glm-5.1', ['input_tokens' => '1.4', 'cached_input_tokens' => '0.26', 'output_tokens' => '4.4']],
+    ['zai:glm-5', ['input_tokens' => '1', 'cached_input_tokens' => '0.2', 'output_tokens' => '3.2']],
+    ['zai:glm-4.7', ['input_tokens' => '0.6', 'cached_input_tokens' => '0.11', 'output_tokens' => '2.2']],
+    ['zai:glm-4.6', ['input_tokens' => '0.6', 'cached_input_tokens' => '0.11', 'output_tokens' => '2.2']],
+    ['zai:glm-4.5-air', ['input_tokens' => '0.2', 'cached_input_tokens' => '0.03', 'output_tokens' => '1.1']],
+    ['moonshot:kimi-k3', ['input_tokens' => '3', 'cached_input_tokens' => '0.3', 'cache_write_input_tokens_5m' => '3', 'cache_write_input_tokens_1h' => '6', 'output_tokens' => '15']],
+    ['moonshot:kimi-k2.7-code', ['input_tokens' => '0.95', 'cached_input_tokens' => '0.19', 'output_tokens' => '4']],
+    ['moonshot:kimi-k2.7-code-highspeed', ['input_tokens' => '1.9', 'cached_input_tokens' => '0.38', 'output_tokens' => '8']],
+    ['moonshot:kimi-k2.6', ['input_tokens' => '0.95', 'cached_input_tokens' => '0.16', 'output_tokens' => '4']],
+]);
+
+it('prices each Qwen basis with 20% implicit cache hits and 125% explicit cache creation', function (string $key, string $input, string $output): void {
+    $expected = [
+        'input_tokens' => $input,
+        'output_tokens' => $output,
+        'cache_write_input_tokens' => BigDecimal::of($input)->multipliedBy('1.25'),
+    ];
+
+    // Alibaba publishes the qwen3.8 cache-hit rate only in its console.
+    if (! str_starts_with($key, 'dashscope:qwen3.8-')) {
+        $expected['cached_input_tokens'] = BigDecimal::of($input)->multipliedBy('0.2');
+    }
+
+    expectBasisPrices($key, $expected);
+})->with([
+    ['dashscope:qwen3.8-max-intl', '2', '6'],
+    ['dashscope:qwen3.8-flash-intl', '0.15', '0.47'],
+    ['dashscope:qwen3.7-max-intl', '2.5', '7.5'],
+    ['dashscope:qwen3.7-plus-intl-256k', '0.4', '1.6'],
+    ['dashscope:qwen3.7-plus-intl-1m', '1.2', '4.8'],
+    ['dashscope:qwen3.7-flash-intl-32k', '0.03', '0.13'],
+    ['dashscope:qwen3.7-flash-intl-256k', '0.1', '0.4'],
+    ['dashscope:qwen3.7-flash-intl-1m', '0.2', '0.8'],
+    ['dashscope:qwen3-max-intl-32k', '1.2', '6'],
+    ['dashscope:qwen3-max-intl-128k', '2.4', '12'],
+    ['dashscope:qwen3-max-intl-256k', '3', '15'],
+    ['dashscope:qwen-plus-intl-nonthinking-256k', '0.4', '1.2'],
+    ['dashscope:qwen-plus-intl-thinking-256k', '0.4', '4'],
+    ['dashscope:qwen-plus-intl-nonthinking-1m', '1.2', '3.6'],
+    ['dashscope:qwen-plus-intl-thinking-1m', '1.2', '12'],
+    ['dashscope:qwen-flash-intl-256k', '0.05', '0.4'],
+    ['dashscope:qwen-flash-intl-1m', '0.25', '2'],
+    ['dashscope:qwen3-coder-plus-intl-32k', '1', '5'],
+    ['dashscope:qwen3-coder-plus-intl-128k', '1.8', '9'],
+    ['dashscope:qwen3-coder-plus-intl-256k', '3', '15'],
+    ['dashscope:qwen3-coder-plus-intl-1m', '6', '60'],
+    ['dashscope:qwen3-coder-flash-intl-32k', '0.3', '1.5'],
+    ['dashscope:qwen3-coder-flash-intl-128k', '0.5', '2.5'],
+    ['dashscope:qwen3-coder-flash-intl-256k', '0.8', '4'],
+    ['dashscope:qwen3-coder-flash-intl-1m', '1.6', '9.6'],
+]);
+
+it('prices each open-lab OpenRouter bound basis at its worst default-routed endpoint', function (string $model, string $input, string $cacheRead, ?string $cacheWrite, string $output): void {
+    $expected = ['input_tokens' => $input, 'cached_input_tokens' => $cacheRead, 'output_tokens' => $output];
+
+    if ($cacheWrite !== null) {
+        $expected['cache_write_input_tokens'] = $cacheWrite;
+    }
+
+    expectBasisPrices("openrouter:{$model}-standard-max", $expected);
+
+    expect(packagePricingSnapshot()['prices']["openrouter:{$model}-standard-max"]['notes'])->toContain('Worst-case default-routed endpoint, re-review on endpoint churn')
+        ->and(packagePricingSource()->allowsFallback(new ModelIdentity('openrouter', $model)))->toBeFalse();
+})->with([
+    ['deepseek/deepseek-v4.1-flash', '0.45', '0.049', null, '1.8'],
+    ['deepseek/deepseek-v4-pro-0813', '1.65', '0.219', null, '5'],
+    ['deepseek/deepseek-v4-pro', '1.91', '0.33', null, '10.5'],
+    ['deepseek/deepseek-v4-flash', '0.44', '0.07', null, '1.536'],
+    ['deepseek/deepseek-v4-flash-0731', '0.44', '0.07', null, '1.536'],
+    ['deepseek/deepseek-v3.2', '3', '0.5', null, '4.5'],
+    ['qwen/qwen3.7-plus', '0.96', '0.192', '1.2', '3.84'],
+    ['qwen/qwen3.7-max', '2', '0.4', '1.84375', '6'],
+    ['qwen/qwen3.7-flash', '0.23', '0.046', '0.25', '0.92'],
+    ['qwen/qwen3.8-2.4t-a95b', '2', '0.25', '2.5', '6'],
+    ['qwen/qwen3.8-27b', '0.99', '0.99', '0.53125', '4.7'],
+    ['qwen/qwen3-coder-flash', '0.52', '0.104', '0.65', '2.6'],
+    ['qwen/qwen3-coder', '0.35', '0.1', null, '1.8'],
+    ['qwen/qwen-plus', '0.78', '0.156', '0.975', '2.34'],
+    ['moonshotai/kimi-k3', '4.5', '1.2', '3.75', '22.5'],
+    ['moonshotai/kimi-k2.7-code', '1.9', '0.38', null, '8'],
+    ['moonshotai/kimi-k2.6', '1.09', '0.37', null, '4.6'],
+    ['z-ai/glm-5.3', '1.54', '0.26', null, '6'],
+    ['z-ai/glm-5.3-flash', '0.225', '0.099', null, '1.6'],
+    ['z-ai/glm-5.2', '1.54', '0.26', null, '10'],
+    ['z-ai/glm-5.1', '1.4014', '0.6', null, '4.4044'],
+    ['z-ai/glm-5', '1', '0.2', null, '3.2'],
+    ['z-ai/glm-4.7', '0.7', '0.11', null, '2.5'],
+    ['z-ai/glm-4.6', '0.6', '0.11', null, '2.2'],
+    ['z-ai/glm-4.5-air', '0.2', '0.03', null, '1.1'],
+]);
+
+it('quotes one model per new family against a hand-calculated total', function (string $provider, string $model, array $usage, string $expected): void {
+    $quote = AiPricing::quote($provider, $model, new Usage($usage));
+
+    expect($quote->amount?->isEqualTo($expected))->toBeTrue("Expected {$expected}, got {$quote->amount}.")
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->source)->toBe(PricingSource::ProviderNative);
+})->with([
+    // 1,000 x (10 + 50 + 0.25 + 12.50 + 20)/M + 2 x 0.01 = 0.09275 + 0.02.
+    'Claude Fable 5.1, every unit' => ['anthropic', 'claude-fable-5-1-global', [
+        'input_tokens' => 1_000, 'output_tokens' => 1_000, 'cached_input_tokens' => 1_000,
+        'cache_write_input_tokens_5m' => 1_000, 'cache_write_input_tokens_1h' => 1_000, 'web_searches' => 2,
+    ], '0.11275'],
+    // Alias to claude-haiku-4-5-20251001: 1M x 1/M + 1M x 5/M.
+    'Claude Haiku 4.5 alias' => ['anthropic', 'claude-haiku-4-5', ['input_tokens' => 1_000_000, 'output_tokens' => 1_000_000], '6'],
+    // 300,000 x 4/M + 10,000 x 0.40/M + 1,000 x 18/M + 2 x 0.014 = 1.2 + 0.004 + 0.018 + 0.028.
+    'Gemini 3.1 Pro long prompt' => ['gemini', 'gemini-3.1-pro-preview-standard-long', [
+        'input_tokens' => 300_000, 'cached_input_tokens' => 10_000, 'output_tokens' => 1_000, 'web_searches' => 2,
+    ], '1.25'],
+    // 400,000 x 8/M + 100,000 x 0.80/M + 50,000 x 10/M + 20,000 x 30/M + 3 x 0.01 = 3.2 + 0.08 + 0.5 + 0.6 + 0.03.
+    'GPT-5.6 Sol long prompt' => ['openai', 'gpt-5.6-sol-standard-long', [
+        'input_tokens' => 400_000, 'cached_input_tokens' => 100_000, 'cache_write_input_tokens' => 50_000,
+        'output_tokens' => 20_000, 'web_searches' => 3,
+    ], '4.41'],
+    // 1M x 1.65/M + 200,000 x 0.219/M + 100,000 x 5/M = 1.65 + 0.0438 + 0.5.
+    'DeepSeek V4 Pro on OpenRouter' => ['openrouter', 'deepseek/deepseek-v4-pro-0813-standard-max', [
+        'input_tokens' => 1_000_000, 'cached_input_tokens' => 200_000, 'output_tokens' => 100_000,
+    ], '2.1938'],
+    // 500,000 x 1.2/M + 100,000 x 0.24/M + 20,000 x 1.5/M + 10,000 x 4.8/M = 0.6 + 0.024 + 0.03 + 0.048.
+    'Qwen 3.7 Plus 1M tier' => ['dashscope', 'qwen3.7-plus-intl-1m', [
+        'input_tokens' => 500_000, 'cached_input_tokens' => 100_000, 'cache_write_input_tokens' => 20_000, 'output_tokens' => 10_000,
+    ], '0.702'],
+    // 1M x 1.4/M + 1M x 0.26/M + 1M x 4.4/M.
+    'GLM 5.2 direct' => ['zai', 'glm-5.2', ['input_tokens' => 1_000_000, 'cached_input_tokens' => 1_000_000, 'output_tokens' => 1_000_000], '6.06'],
+    // 1M x 3/M + 100,000 x 6/M + 100,000 x 15/M = 3 + 0.6 + 1.5.
+    'Kimi K3 1-hour cache write' => ['moonshot', 'kimi-k3', ['input_tokens' => 1_000_000, 'cache_write_input_tokens_1h' => 100_000, 'output_tokens' => 100_000], '5.1'],
+]);
