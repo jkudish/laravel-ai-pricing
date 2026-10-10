@@ -293,7 +293,7 @@ $cost = AiPricing::cost([
 ]);
 ```
 
-A provider-reported `usage.cost` still wins, and a `web_searches` or `openrouter_web_searches` count you pass yourself is used as given.
+A provider-reported `usage.cost` still wins, and a `web_searches` or `openrouter_web_searches` count you pass yourself is used as given. When only some steps of a laravel/ai response have a readable raw response and those report searches, the known count is a lower bound, so it becomes the unpriced `web_search_requests_incomplete` unit and the quote is partial.
 
 Known limitations:
 

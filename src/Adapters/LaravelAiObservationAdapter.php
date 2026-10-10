@@ -138,10 +138,15 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             if (! array_key_exists('web_searches', $usage)
                 && ! array_key_exists('openrouter_web_searches', $usage)
                 && ! array_key_exists('server_tool_use', $usage)) {
-                $searches = $this->rawWebSearchRequests($data);
+                [$searches, $complete] = $this->rawWebSearchRequests($data);
 
-                if ($searches !== null && $searches > 0) {
-                    $usage['server_tool_use'] = ['web_search_requests' => $searches];
+                // A count from only some steps is a lower bound: it stays an
+                // unpriced unit so the quote is partial, never a complete
+                // undercount, whatever engine was declared.
+                if ($searches > 0) {
+                    $usage[$complete ? 'server_tool_use' : 'web_search_requests_incomplete'] = $complete
+                        ? ['web_search_requests' => $searches]
+                        : $searches;
                     $data['usage'] = $usage;
                 }
             }
@@ -401,7 +406,7 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
     {
         $payloads = $this->rawResponsePayloads($data);
 
-        if ($payloads === null) {
+        if (in_array(null, $payloads, true)) {
             return null;
         }
 
@@ -433,34 +438,33 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
      *
      * Anthropic and OpenRouter report usage.server_tool_use.web_search_requests,
      * which laravel/ai drops from its normalized usage; the normalized adapter
-     * decides which unit it prices. The count is summed
-     * across every step's raw response; a step that reports no searches
-     * counts zero. An unreadable step, a streamed or serialized response, or a
-     * malformed count yields null, so no count is invented.
+     * decides which unit it prices. The count is summed across every step's
+     * raw response, and a step that reports no searches counts zero. A step
+     * without a readable response or with a malformed count makes the total
+     * incomplete: the readable steps' sum is then only a lower bound. A
+     * streamed or serialized response has no readable step at all.
      *
      * @param  array<string, mixed>  $data
+     * @return array{0: int, 1: bool} The known count and whether it covers every step.
      */
-    private function rawWebSearchRequests(array $data): ?int
+    private function rawWebSearchRequests(array $data): array
     {
-        $payloads = $this->rawResponsePayloads($data);
-
-        if ($payloads === null) {
-            return null;
-        }
-
         $total = 0;
+        $complete = true;
 
-        foreach ($payloads as $payload) {
-            $count = data_get($payload, 'usage.server_tool_use.web_search_requests', 0);
+        foreach ($this->rawResponsePayloads($data) as $payload) {
+            $count = $payload === null ? null : data_get($payload, 'usage.server_tool_use.web_search_requests', 0);
 
             if (! is_int($count) || $count < 0) {
-                return null;
+                $complete = false;
+
+                continue;
             }
 
             $total += $count;
         }
 
-        return $total;
+        return [$total, $complete];
     }
 
     /**
@@ -468,14 +472,14 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
      *
      * A non-streamed response keeps the provider's HTTP response on its public
      * raw property. A multi-step response is read step by step, because the
-     * top-level raw response only describes the final step. Any step without
-     * a readable JSON response, a streamed response, or a serialized response
-     * yields null.
+     * top-level raw response only describes the final step. A step without a
+     * readable JSON response, or a streamed or serialized response with no
+     * raw response, is a null entry.
      *
      * @param  array<string, mixed>  $data
-     * @return list<array<mixed>>|null
+     * @return non-empty-list<array<mixed>|null>
      */
-    private function rawResponsePayloads(array $data): ?array
+    private function rawResponsePayloads(array $data): array
     {
         $steps = data_get($data, 'steps');
 
@@ -487,13 +491,7 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             $payloads = [];
 
             foreach ($steps as $step) {
-                $payload = $this->rawResponsePayload(data_get($step, 'raw'));
-
-                if ($payload === null) {
-                    return null;
-                }
-
-                $payloads[] = $payload;
+                $payloads[] = $this->rawResponsePayload(data_get($step, 'raw'));
             }
 
             if ($payloads !== []) {
@@ -501,9 +499,7 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             }
         }
 
-        $payload = $this->rawResponsePayload($data['raw'] ?? null);
-
-        return $payload === null ? null : [$payload];
+        return [$this->rawResponsePayload($data['raw'] ?? null)];
     }
 
     /** @return array<mixed>|null */
