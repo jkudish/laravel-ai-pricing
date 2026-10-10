@@ -1440,3 +1440,123 @@ it('ignores a raw TTL split that cannot be attributed to the reported aggregate'
     'non-integer split' => [new ProviderResponseFixture(['usage' => ['cache_creation' => ['ephemeral_5m_input_tokens' => '148', 'ephemeral_1h_input_tokens' => 100]]]), null],
     'raw without a split' => [new ProviderResponseFixture(['usage' => ['cache_creation_input_tokens' => 248]]), null],
 ]);
+
+function webSearchDefinition(): PriceDefinition
+{
+    return new PriceDefinition(
+        new ModelIdentity('anthropic', 'claude-search-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '2', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '10', '1000000'),
+            'web_searches' => new Rate('web_searches', '10', '1000'),
+        ],
+        PricingSource::Configured,
+    );
+}
+
+it('maps the reported server-side web search count to web_searches', function (object $adapter, bool $objectBreakdown): void {
+    $serverTools = ['web_search_requests' => 3];
+    $observation = $adapter->adapt([
+        'provider' => 'anthropic',
+        'model' => 'claude-search-test',
+        'usage' => [
+            'input_tokens' => 1_000,
+            'output_tokens' => 500,
+            'server_tool_use' => $objectBreakdown ? (object) $serverTools : $serverTools,
+        ],
+    ]);
+    $quote = (new CostCalculator)->calculate($observation->usage, webSearchDefinition());
+
+    // 1,000 x 2/M + 500 x 10/M + 3 x 10/1,000 = 0.002 + 0.005 + 0.03 = 0.037.
+    expect($observation->usage->toArray())->toMatchArray(['web_searches' => '3'])
+        ->and((string) $quote->cost?->amount)->toBe('0.037')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete);
+})->with([
+    'normalized array' => [new NormalizedObservationAdapter, false],
+    'Claude object' => [new ClaudeObservationAdapter, true],
+    'gateway array' => [new GatewayObservationAdapter, false],
+    'Laravel AI raw usage' => [new LaravelAiObservationAdapter, false],
+]);
+
+it('lets an explicit web_searches unit win over the nested server tool count', function (): void {
+    $observation = (new NormalizedObservationAdapter)->adapt([
+        'provider' => 'anthropic',
+        'model' => 'claude-search-test',
+        'usage' => ['input_tokens' => 1, 'web_searches' => 2, 'server_tool_use' => ['web_search_requests' => 5]],
+    ]);
+
+    expect($observation->usage->toArray()['web_searches'])->toBe('2');
+});
+
+it('counts web searches from every laravel/ai step raw response', function (string $provider): void {
+    $steps = new Collection([
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 2]]])],
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['output_tokens' => 10]])],
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 1]]])],
+    ]);
+    $finalStepOnly = new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 1]]]);
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'usage' => (object) ['inputTokens' => 1_000, 'outputTokens' => 500, 'cacheReadInputTokens' => null, 'cacheWriteInputTokens' => null, 'reasoningTokens' => null],
+        'meta' => (object) ['provider' => $provider, 'model' => 'claude-search-test'],
+        'raw' => $finalStepOnly,
+        'steps' => $steps,
+    ]);
+    $quote = (new CostCalculator)->calculate($observation->usage, webSearchDefinition());
+
+    // Three searches across the steps, not the final step's one:
+    // 0.002 + 0.005 + 3 x 0.01 = 0.037.
+    expect($observation->usage->toArray())->toMatchArray(['web_searches' => '3'])
+        ->and((string) $quote->cost?->amount)->toBe('0.037');
+})->with(['anthropic', 'openrouter']);
+
+it('does not invent a web search count from a laravel/ai response it cannot read', function (mixed $raw, mixed $steps): void {
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'usage' => (object) ['inputTokens' => 1_000, 'outputTokens' => 500],
+        'meta' => (object) ['provider' => 'anthropic', 'model' => 'claude-search-test'],
+        'raw' => $raw,
+        'steps' => $steps,
+    ]);
+
+    expect($observation->usage->toArray())->not->toHaveKey('web_searches');
+})->with([
+    'streamed response without raw' => [null, null],
+    'one step without raw' => [null, [
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 2]]])],
+        (object) ['raw' => null],
+    ]],
+    'non-integer count' => [new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => '2']]]), null],
+    'no searches reported' => [new ProviderResponseFixture(['usage' => ['input_tokens' => 1_000]]), null],
+]);
+
+it('reads the TTL split and web searches from one-shot laravel/ai steps', function (bool $aggregate): void {
+    $generator = (function (): Generator {
+        yield (object) ['raw' => new ProviderResponseFixture(['usage' => [
+            'cache_creation' => ['ephemeral_5m_input_tokens' => 148, 'ephemeral_1h_input_tokens' => 0],
+            'server_tool_use' => ['web_search_requests' => 2],
+        ]])];
+        yield (object) ['raw' => new ProviderResponseFixture(['usage' => [
+            'cache_creation' => ['ephemeral_5m_input_tokens' => 0, 'ephemeral_1h_input_tokens' => 100],
+        ]])];
+    })();
+    $steps = $aggregate ? new class($generator) implements IteratorAggregate
+    {
+        public function __construct(private readonly Generator $steps) {}
+
+        public function getIterator(): Generator
+        {
+            return $this->steps;
+        }
+    } : $generator;
+
+    $usage = (new LaravelAiObservationAdapter)->adapt(laravelAiAnthropicResponse(raw: null, steps: $steps))->usage->toArray();
+
+    expect($usage)->toMatchArray([
+        'cache_write_input_tokens' => '248',
+        'cache_write_input_tokens_5m' => '148',
+        'cache_write_input_tokens_1h' => '100',
+        'web_searches' => '2',
+    ]);
+})->with([
+    'generator' => [false],
+    'aggregate returning the same generator' => [true],
+]);

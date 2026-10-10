@@ -91,7 +91,35 @@ class NormalizedObservationAdapter implements ObservationAdapter
             }
         }
 
-        return [...$units, ...$this->cacheWriteTtlUnits($data, $units)];
+        return [...$units, ...$this->cacheWriteTtlUnits($data, $units), ...$this->webSearchUnits($data, $units)];
+    }
+
+    /**
+     * Map the server-side web search count Anthropic and OpenRouter report.
+     *
+     * Both report usage.server_tool_use.web_search_requests, which maps to the
+     * web_searches unit. OpenRouter counts every search engine there, not only
+     * a provider's native search. An explicit flat web_searches unit wins.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, string|int>  $units
+     * @return array<string, string|int>
+     */
+    private function webSearchUnits(array $data, array $units): array
+    {
+        $serverTools = $data['server_tool_use'] ?? null;
+
+        if (is_object($serverTools)) {
+            $serverTools = get_object_vars($serverTools);
+        }
+
+        $value = is_array($serverTools) ? ($serverTools['web_search_requests'] ?? null) : null;
+
+        if (array_key_exists('web_searches', $units) || (! is_int($value) && ! (is_string($value) && is_numeric($value)))) {
+            return [];
+        }
+
+        return ['web_searches' => $value];
     }
 
     /**
