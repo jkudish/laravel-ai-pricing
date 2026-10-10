@@ -94,8 +94,10 @@ it('adapts the nested meta and usage shape returned by Laravel AI responses', fu
 
         public function __construct()
         {
+            // laravel/ai 0.11.2 OpenRouter reports prompt_tokens 120 minus
+            // its 20 cache reads and 10 cache writes.
             $this->usage = (object) [
-                'promptTokens' => 120,
+                'promptTokens' => 90,
                 'completionTokens' => 30,
                 'cacheWriteInputTokens' => 10,
                 'cacheReadInputTokens' => 20,
@@ -250,8 +252,12 @@ it('maps real Laravel AI cache usage without double billing provider input', fun
     'OpenAI array reports exclusive input' => ['openai', 100, true],
     'Bedrock object reports exclusive input' => ['bedrock', 100, false],
     'Bedrock array reports exclusive input' => ['bedrock', 100, true],
-    'OpenRouter object reports inclusive prompt' => ['openrouter', 60, false],
-    'OpenRouter array reports inclusive prompt' => ['openrouter', 60, true],
+    // laravel/ai 0.11.1+ subtracts OpenRouter cache reads and writes itself.
+    'OpenRouter object reports exclusive input' => ['openrouter', 100, false],
+    'OpenRouter array reports exclusive input' => ['openrouter', 100, true],
+    // laravel/ai 0.11.0+ subtracts DeepSeek cache hits itself.
+    'DeepSeek object reports exclusive input' => ['deepseek', 100, false],
+    'DeepSeek array reports exclusive input' => ['deepseek', 100, true],
     'Groq object reports inclusive prompt' => ['groq', 60, false],
     'Groq array reports inclusive prompt' => ['groq', 60, true],
     'OpenAI-compatible object reports inclusive prompt' => ['openai-compatible', 60, false],
@@ -306,7 +312,17 @@ it('gives an explicit Laravel AI input token semantic precedence and validates i
         'usage' => ['promptTokens' => 100, 'cacheReadInputTokens' => 30, 'cacheWriteInputTokens' => 10],
     ]);
 
+    // A caller with an inclusive count from an OpenRouter-shaped payload, such
+    // as laravel/ai before 0.11.1, says so explicitly: 100 - 30 - 10.
+    $inclusive = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'anthropic/claude-test',
+        'input_token_semantic' => 'inclusive',
+        'usage' => ['promptTokens' => 100, 'cacheReadInputTokens' => 30, 'cacheWriteInputTokens' => 10],
+    ]);
+
     expect($observation->usage->toArray()['input_tokens'])->toBe('100')
+        ->and($inclusive->usage->toArray()['input_tokens'])->toBe('60')
         ->and(fn () => (new LaravelAiObservationAdapter)->adapt([
             'provider' => 'local-llama',
             'model' => 'llama-test',
@@ -1595,8 +1611,13 @@ it('never bills an OpenAI cache write on top of the input tokens that include it
     'laravel/ai 1.x OpenAI' => ['openai', ['inputTokens' => 1_000, 'outputTokens' => 100, 'cacheReadInputTokens' => 200, 'cacheWriteInputTokens' => 300, 'reasoningTokens' => null]],
     // laravel/ai 0.11.2 subtracts the cached and written tokens itself.
     'laravel/ai 0.11 OpenAI' => ['openai', ['promptTokens' => 500, 'completionTokens' => 100, 'cacheWriteInputTokens' => 300, 'cacheReadInputTokens' => 200, 'reasoningTokens' => 0]],
-    // OpenRouter's prompt_tokens includes cache reads and writes.
-    'laravel/ai 0.11 OpenRouter OpenAI model' => ['openrouter', ['promptTokens' => 1_000, 'completionTokens' => 100, 'cacheWriteInputTokens' => 300, 'cacheReadInputTokens' => 200, 'reasoningTokens' => 0]],
+    // laravel/ai 0.11.2 subtracts OpenRouter's cache reads and writes from
+    // prompt_tokens itself (1,000 - 200 - 300), so the adapter must not again.
+    'laravel/ai 0.11 OpenRouter OpenAI model' => ['openrouter', ['promptTokens' => 500, 'completionTokens' => 100, 'cacheWriteInputTokens' => 300, 'cacheReadInputTokens' => 200, 'reasoningTokens' => 0]],
+    // The same usage serialized by laravel/ai 0.11.2 Usage::toArray().
+    'laravel/ai 0.11 OpenRouter serialized usage' => ['openrouter', ['prompt_tokens' => 500, 'completion_tokens' => 100, 'cache_write_input_tokens' => 300, 'cache_read_input_tokens' => 200, 'reasoning_tokens' => 0]],
+    // laravel/ai 1.x reports OpenRouter's inclusive prompt_tokens as inputTokens.
+    'laravel/ai 1.x OpenRouter OpenAI model' => ['openrouter', ['inputTokens' => 1_000, 'outputTokens' => 100, 'cacheReadInputTokens' => 200, 'cacheWriteInputTokens' => 300, 'reasoningTokens' => null]],
 ]);
 
 it('does not read a cache-write count from a raw OpenAI Responses usage payload', function (object $adapter): void {

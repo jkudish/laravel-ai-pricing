@@ -14,7 +14,19 @@ use Traversable;
 
 final class LaravelAiObservationAdapter implements ObservationAdapter
 {
-    private const array INCLUSIVE_DRIVERS = ['openrouter', 'groq', 'openai-compatible', 'deepseek', 'mistral'];
+    /**
+     * laravel/ai 0.x drivers whose promptTokens is the provider's raw, cache-inclusive count.
+     *
+     * The Groq, OpenAI-compatible and Mistral parsers pass prompt_tokens
+     * through unchanged in every 0.x release. The OpenRouter parser subtracts
+     * cache reads and writes itself from v0.11.1 and the DeepSeek parser
+     * subtracts cache hits from v0.11.0, so their 0.x usage is read as
+     * cache-exclusive: subtracting again would bill cached tokens as free.
+     * Earlier 0.x releases of those two drivers reported the inclusive count
+     * and are now overstated rather than understated; pass an inclusive
+     * input token semantic for them.
+     */
+    private const array INCLUSIVE_DRIVERS = ['groq', 'openai-compatible', 'mistral'];
 
     private const array EXCLUSIVE_REASONING_DRIVERS = ['gemini', 'xai'];
 
