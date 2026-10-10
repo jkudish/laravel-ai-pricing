@@ -1304,6 +1304,20 @@ it('bills the aggregate at a generic cache-write rate exactly as before when the
         ->and($withoutSplit->completeness)->toBe(CostCompleteness::Complete);
 });
 
+it('never bills a split larger than its reported aggregate at a generic cache-write rate', function (): void {
+    $quote = (new CostCalculator)->calculate(
+        (new NormalizedObservationAdapter)->adapt(['provider' => 'anthropic', 'model' => 'claude-catalog-test', 'usage' => [
+            'cache_creation_input_tokens' => 100,
+            'cache_creation' => ['ephemeral_5m_input_tokens' => 200, 'ephemeral_1h_input_tokens' => 100],
+        ]])->usage,
+        genericCacheWriteDefinition(),
+    );
+
+    expect($quote->cost)->toBeNull()
+        ->and($quote->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($quote->missingUnits)->toBe(['cache_write_input_tokens', 'cache_write_input_tokens_5m', 'cache_write_input_tokens_1h']);
+});
+
 it('settles the cache-write family once without double billing the split or guessing a TTL', function (array $units, ?string $amount, array $missing): void {
     $definition = new PriceDefinition(
         new ModelIdentity('anthropic', 'claude-family-test'),
@@ -1321,7 +1335,8 @@ it('settles the cache-write family once without double billing the split or gues
     'split covering the aggregate' => [['cache_write_input_tokens' => 300, 'cache_write_input_tokens_5m' => 200, 'cache_write_input_tokens_1h' => 100], '0.0018', []],
     'split without an aggregate' => [['cache_write_input_tokens_5m' => 200], '0.001', []],
     'aggregate larger than the split leaves an unknown-TTL remainder' => [['cache_write_input_tokens' => 350, 'cache_write_input_tokens_5m' => 200, 'cache_write_input_tokens_1h' => 100], '0.0018', ['cache_write_input_tokens']],
-    'aggregate smaller than the split bills the split' => [['cache_write_input_tokens' => 100, 'cache_write_input_tokens_5m' => 200, 'cache_write_input_tokens_1h' => 100], '0.0018', []],
+    'aggregate smaller than the split is contradictory and stays missing' => [['cache_write_input_tokens' => 100, 'cache_write_input_tokens_5m' => 200, 'cache_write_input_tokens_1h' => 100], null, ['cache_write_input_tokens', 'cache_write_input_tokens_5m', 'cache_write_input_tokens_1h']],
+    'explicit zero aggregate under a split is contradictory and stays missing' => [['cache_write_input_tokens' => 0, 'cache_write_input_tokens_5m' => 200], null, ['cache_write_input_tokens', 'cache_write_input_tokens_5m']],
     'aggregate only' => [['cache_write_input_tokens' => 300], null, ['cache_write_input_tokens']],
 ]);
 

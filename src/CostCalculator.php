@@ -194,6 +194,10 @@ final class CostCalculator
      *   split was mapped.
      * - Otherwise each subset bills at its own rate or is reported missing.
      *
+     * A reported aggregate (including zero) smaller than its split is
+     * contradictory: every reported family unit is missing and nothing in
+     * the family is billed.
+     *
      * A generic aggregate with no split therefore never satisfies a price
      * that only publishes TTL-specific rates: it stays a missing unit, so the
      * quote is partial instead of guessing which TTL was written.
@@ -216,12 +220,22 @@ final class CostCalculator
             ]);
         }
 
+        // A reported aggregate (even zero) smaller than its own split is
+        // contradictory usage. Neither count is trustworthy, so the whole
+        // family stays missing and the quote is partial instead of guessing.
+        if (array_key_exists('cache_write_input_tokens', $usage->toArray()) && $aggregate->compareTo($split) < 0) {
+            return [[], array_values(array_filter(
+                self::CACHE_WRITE_FAMILY,
+                static fn (string $unit): bool => array_key_exists($unit, $usage->toArray()),
+            ))];
+        }
+
         $splitPriced = ($fiveMinute->isZero() || $fiveMinuteRate !== null)
             && ($oneHour->isZero() || $oneHourRate !== null);
 
         if (! $splitPriced && ! $aggregate->isZero() && $genericRate !== null) {
             return $this->priceSegments([
-                [$aggregate->compareTo($split) >= 0 ? $aggregate : $split, $genericRate, 'cache_write_input_tokens'],
+                [$aggregate, $genericRate, 'cache_write_input_tokens'],
             ]);
         }
 
@@ -230,6 +244,7 @@ final class CostCalculator
         return $this->priceSegments([
             [$fiveMinute, $fiveMinuteRate, 'cache_write_input_tokens_5m'],
             [$oneHour, $oneHourRate, 'cache_write_input_tokens_1h'],
+            // Only an absent aggregate can leave a negative remainder here.
             [$remainder->isNegative() ? BigDecimal::zero() : $remainder, $genericRate, 'cache_write_input_tokens'],
         ]);
     }
