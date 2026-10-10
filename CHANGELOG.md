@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-10
+
 ### Added
 
 - Reviewed popular-model pricing (pricing snapshot v12, retrieved 2026-10-10): 171 billing bases checked against each provider's primary source, plus the `anthropic:claude-opus-4-5` and `claude-haiku-4-5` aliases. Each basis names the conditions its rates apply to, and callers must enforce them:
@@ -137,7 +139,8 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.2...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.3...main
+[0.2.3]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.1.2...v0.2.0
