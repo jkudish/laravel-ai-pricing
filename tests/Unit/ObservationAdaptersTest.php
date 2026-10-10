@@ -1560,3 +1560,58 @@ it('reads the TTL split and web searches from one-shot laravel/ai steps', functi
     'generator' => [false],
     'aggregate returning the same generator' => [true],
 ]);
+
+it('never bills an OpenAI cache write on top of the input tokens that include it', function (string $provider, array $usage): void {
+    // One OpenAI response: 1,000 input tokens, of which 200 were read from the
+    // cache and 300 were written to it, and 100 output tokens. Rates follow
+    // GPT-5.6 Terra: input 2/M, cached 0.2/M, cache write 2.5/M, output 12/M.
+    // Each input token bills exactly once:
+    //   500 uncached x 2/M + 200 x 0.2/M + 300 x 2.5/M + 100 x 12/M
+    //   = 0.001 + 0.00004 + 0.00075 + 0.0012 = 0.00299.
+    // Billing the write on top of an inclusive count would charge 800 uncached
+    // tokens plus the 300 written (0.00359).
+    $definition = new PriceDefinition(
+        new ModelIdentity($provider, 'gpt-cache-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '2', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.2', '1000000'),
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '2.5', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '12', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+    $observation = (new LaravelAiObservationAdapter)->adapt(['provider' => $provider, 'model' => 'gpt-cache-test', 'usage' => $usage]);
+    $quote = (new CostCalculator)->calculate($observation->usage, $definition);
+
+    expect($observation->usage->toArray())->toMatchArray([
+        'input_tokens' => '500',
+        'cached_input_tokens' => '200',
+        'cache_write_input_tokens' => '300',
+    ])
+        ->and((string) $quote->cost?->amount)->toBe('0.00299')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete);
+})->with([
+    // laravel/ai 1.x TextUsage: inputTokens is the provider's inclusive total.
+    'laravel/ai 1.x OpenAI' => ['openai', ['inputTokens' => 1_000, 'outputTokens' => 100, 'cacheReadInputTokens' => 200, 'cacheWriteInputTokens' => 300, 'reasoningTokens' => null]],
+    // laravel/ai 0.11.2 subtracts the cached and written tokens itself.
+    'laravel/ai 0.11 OpenAI' => ['openai', ['promptTokens' => 500, 'completionTokens' => 100, 'cacheWriteInputTokens' => 300, 'cacheReadInputTokens' => 200, 'reasoningTokens' => 0]],
+    // OpenRouter's prompt_tokens includes cache reads and writes.
+    'laravel/ai 0.11 OpenRouter OpenAI model' => ['openrouter', ['promptTokens' => 1_000, 'completionTokens' => 100, 'cacheWriteInputTokens' => 300, 'cacheReadInputTokens' => 200, 'reasoningTokens' => 0]],
+]);
+
+it('does not read a cache-write count from a raw OpenAI Responses usage payload', function (object $adapter): void {
+    $usage = $adapter->adapt([
+        'provider' => 'openai',
+        'model' => 'gpt-cache-test',
+        'usage' => [
+            'input_tokens' => 1_000,
+            'input_tokens_details' => ['cached_tokens' => 200, 'cache_write_tokens' => 300],
+            'output_tokens' => 100,
+        ],
+    ])->usage->toArray();
+
+    // The nested details are not partitions these adapters read, so the write
+    // can never bill on top of the inclusive input count.
+    expect($usage)->not->toHaveKey('cache_write_input_tokens')
+        ->and($usage['input_tokens'])->toBe('1000');
+})->with([new NormalizedObservationAdapter, new CodexObservationAdapter, new GatewayObservationAdapter]);
