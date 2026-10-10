@@ -29,7 +29,7 @@ class NormalizedObservationAdapter implements ObservationAdapter
         }
 
         $usage = $this->record(is_array($usage) ? $usage : get_object_vars($usage));
-        $units = $this->normalizeUsage($usage);
+        $units = $this->normalizeUsage($usage, $identity, $this->webSearchEngine($data));
         $cost = $data['cost'] ?? $data['provider_cost'] ?? null;
         $currency = is_string($data['currency'] ?? null) ? $data['currency'] : 'USD';
 
@@ -48,7 +48,7 @@ class NormalizedObservationAdapter implements ObservationAdapter
     /** @param array<string, mixed> $data
      * @return array<string, string|int>
      */
-    private function normalizeUsage(array $data): array
+    private function normalizeUsage(array $data, ModelIdentity $identity, ?string $webSearchEngine): array
     {
         $aliases = [
             'input_tokens' => ['input_tokens', 'prompt_tokens', 'inputTokens', 'promptTokens'],
@@ -91,21 +91,26 @@ class NormalizedObservationAdapter implements ObservationAdapter
             }
         }
 
-        return [...$units, ...$this->cacheWriteTtlUnits($data, $units), ...$this->webSearchUnits($data, $units)];
+        return [...$units, ...$this->cacheWriteTtlUnits($data, $units), ...$this->webSearchUnits($data, $units, $identity, $webSearchEngine)];
     }
 
     /**
      * Map the server-side web search count Anthropic and OpenRouter report.
      *
-     * Both report usage.server_tool_use.web_search_requests, which maps to the
-     * web_searches unit. OpenRouter counts every search engine there, not only
-     * a provider's native search. An explicit flat web_searches unit wins.
+     * Both report usage.server_tool_use.web_search_requests. Anthropic counts
+     * its native search, which maps to web_searches. OpenRouter counts every
+     * engine it ran (native, Exa, Firecrawl, Parallel or Perplexity, each
+     * billed differently) and does not say which, so its count maps to the
+     * distinct, unpriced openrouter_web_searches unit and keeps the quote
+     * partial. Only a caller that declares the native engine
+     * (web_search_engine: native) gets web_searches for an OpenRouter count.
+     * An explicit flat web_searches or openrouter_web_searches unit wins.
      *
      * @param  array<string, mixed>  $data
      * @param  array<string, string|int>  $units
      * @return array<string, string|int>
      */
-    private function webSearchUnits(array $data, array $units): array
+    private function webSearchUnits(array $data, array $units, ModelIdentity $identity, ?string $webSearchEngine): array
     {
         $serverTools = $data['server_tool_use'] ?? null;
 
@@ -115,11 +120,31 @@ class NormalizedObservationAdapter implements ObservationAdapter
 
         $value = is_array($serverTools) ? ($serverTools['web_search_requests'] ?? null) : null;
 
-        if (array_key_exists('web_searches', $units) || (! is_int($value) && ! (is_string($value) && is_numeric($value)))) {
+        if (array_key_exists('web_searches', $units)
+            || array_key_exists('openrouter_web_searches', $units)
+            || (! is_int($value) && ! (is_string($value) && is_numeric($value)))) {
             return [];
         }
 
-        return ['web_searches' => $value];
+        $native = strtolower(trim($identity->provider)) !== 'openrouter' || $webSearchEngine === 'native';
+
+        return [$native ? 'web_searches' : 'openrouter_web_searches' => $value];
+    }
+
+    /**
+     * Read the search engine the caller declares its OpenRouter request ran.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function webSearchEngine(array $data): ?string
+    {
+        $engine = $data['web_search_engine'] ?? $data['webSearchEngine'] ?? null;
+
+        if ($engine !== null && (! is_string($engine) || trim($engine) === '')) {
+            throw new InvalidArgumentException('The web search engine must be a non-empty string.');
+        }
+
+        return $engine === null ? null : strtolower(trim($engine));
     }
 
     /**

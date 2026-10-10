@@ -133,11 +133,15 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
                 $data['usage'] = $usage;
             }
 
-            if (! array_key_exists('web_searches', $usage) && ! array_key_exists('server_tool_use', $usage)) {
+            // The recovered count takes the reported shape, so the normalized
+            // adapter applies one engine rule to raw and nested counts alike.
+            if (! array_key_exists('web_searches', $usage)
+                && ! array_key_exists('openrouter_web_searches', $usage)
+                && ! array_key_exists('server_tool_use', $usage)) {
                 $searches = $this->rawWebSearchRequests($data);
 
                 if ($searches !== null && $searches > 0) {
-                    $usage['web_searches'] = $searches;
+                    $usage['server_tool_use'] = ['web_search_requests' => $searches];
                     $data['usage'] = $usage;
                 }
             }
@@ -419,7 +423,8 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
      * Count server-side web searches from the raw provider responses.
      *
      * Anthropic and OpenRouter report usage.server_tool_use.web_search_requests,
-     * which laravel/ai drops from its normalized usage. The count is summed
+     * which laravel/ai drops from its normalized usage; the normalized adapter
+     * decides which unit it prices. The count is summed
      * across every step's raw response; a step that reports no searches
      * counts zero. An unreadable step, a streamed or serialized response, or a
      * malformed count yields null, so no count is invented.

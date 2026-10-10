@@ -280,13 +280,27 @@ Anthropic bills cache writes by TTL: a 5-minute write and a 1-hour write have di
 
 laravel/ai normalizes Anthropic usage to a single `cacheWriteInputTokens` count. For a non-streamed response, the adapter recovers the split from the response's `raw` HTTP response, summed across `steps` for tool loops, and uses it only when it adds up to the reported aggregate. Streamed and serialized responses carry no raw response, so their cache writes keep a partial quote on an Anthropic basis. Callers that record the split themselves can pass `cache_write_input_tokens_5m` and `cache_write_input_tokens_1h` directly.
 
-Web searches bill per search on the bases that publish a `web_searches` rate. Anthropic and OpenRouter report the count as `usage.server_tool_use.web_search_requests`; the normalized, Claude and gateway adapters map it to `web_searches`, and the Laravel AI adapter reads it from the raw response of each step. OpenRouter's count covers every search engine it ran, not only native search, so it is priced at the basis's native rate. Pass `web_searches` yourself when you record the count another way.
+Web searches bill per search on the bases that publish a `web_searches` rate, which is the provider's native search rate. Anthropic and OpenRouter report the count as `usage.server_tool_use.web_search_requests`; the normalized, Claude and gateway adapters read it from the usage, and the Laravel AI adapter reads it from the raw response of each step. An Anthropic count maps to `web_searches`. OpenRouter's count covers every engine it ran (native, Exa, Firecrawl, Parallel or Perplexity, whose fees depend on the engine, mode and result count) without saying which, so it maps to the distinct `openrouter_web_searches` unit. No snapshot basis prices that unit, so the quote is partial rather than complete at the wrong rate. When your OpenRouter request pinned the native engine on a model that supports native search, declare it on the observation and the count prices as `web_searches`:
+
+```php
+$cost = AiPricing::cost([
+    'provider' => 'openrouter',
+    'model' => 'anthropic/claude-sonnet-5.5-standard-max',
+    'usage' => $response->usage,
+    'raw' => $response->raw,
+    'steps' => $response->steps,
+    'web_search_engine' => 'native', // The request sent engine "native".
+]);
+```
+
+A provider-reported `usage.cost` still wins, and a `web_searches` or `openrouter_web_searches` count you pass yourself is used as given.
 
 Known limitations:
 
 - OpenAI usage reports no search count, so the adapters do not count OpenAI web searches yet. On an OpenAI basis with a `web_searches` rate, pass the number of `web_search_call` items whose action is `search`, or those searches go unbilled.
 - Streamed and serialized laravel/ai responses carry no raw response, so their Anthropic cache-write TTL split and web search counts are not recovered.
 - laravel/ai's `openai-compatible` driver drops cache-write counts (Kimi `cache_write_tokens`, Qwen `cache_creation_input_tokens`). Through that driver, cache writes on the `moonshot:kimi-k3` and `dashscope:*` bases bill as uncached input: exact for Kimi 5-minute writes, but short for Kimi 1-hour writes (3.00/M) and Qwen explicit cache creation (25%).
+- OpenRouter web search counts do not say which engine ran, so they stay unpriced (`openrouter_web_searches`) and keep the quote partial unless the observation declares `web_search_engine: 'native'`.
 - Gemini cache writes on OpenRouter stay unpriced, both in the live catalog and on the snapshot bases, so a Gemini cache-write count keeps the quote partial.
 
 Snapshot entries include source and retrieval metadata in `resources/pricing/provider-skus.php`. Future rate changes should follow `.agents/skills/fetching-provider-pricing`; runtime code never scrapes provider pricing pages.
