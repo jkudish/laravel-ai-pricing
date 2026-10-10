@@ -94,8 +94,10 @@ it('adapts the nested meta and usage shape returned by Laravel AI responses', fu
 
         public function __construct()
         {
+            // laravel/ai 0.11.2 OpenRouter reports prompt_tokens 120 minus
+            // its 20 cache reads and 10 cache writes.
             $this->usage = (object) [
-                'promptTokens' => 120,
+                'promptTokens' => 90,
                 'completionTokens' => 30,
                 'cacheWriteInputTokens' => 10,
                 'cacheReadInputTokens' => 20,
@@ -250,8 +252,12 @@ it('maps real Laravel AI cache usage without double billing provider input', fun
     'OpenAI array reports exclusive input' => ['openai', 100, true],
     'Bedrock object reports exclusive input' => ['bedrock', 100, false],
     'Bedrock array reports exclusive input' => ['bedrock', 100, true],
-    'OpenRouter object reports inclusive prompt' => ['openrouter', 60, false],
-    'OpenRouter array reports inclusive prompt' => ['openrouter', 60, true],
+    // laravel/ai 0.11.1+ subtracts OpenRouter cache reads and writes itself.
+    'OpenRouter object reports exclusive input' => ['openrouter', 100, false],
+    'OpenRouter array reports exclusive input' => ['openrouter', 100, true],
+    // laravel/ai 0.11.0+ subtracts DeepSeek cache hits itself.
+    'DeepSeek object reports exclusive input' => ['deepseek', 100, false],
+    'DeepSeek array reports exclusive input' => ['deepseek', 100, true],
     'Groq object reports inclusive prompt' => ['groq', 60, false],
     'Groq array reports inclusive prompt' => ['groq', 60, true],
     'OpenAI-compatible object reports inclusive prompt' => ['openai-compatible', 60, false],
@@ -306,7 +312,17 @@ it('gives an explicit Laravel AI input token semantic precedence and validates i
         'usage' => ['promptTokens' => 100, 'cacheReadInputTokens' => 30, 'cacheWriteInputTokens' => 10],
     ]);
 
+    // A caller with an inclusive count from an OpenRouter-shaped payload, such
+    // as laravel/ai before 0.11.1, says so explicitly: 100 - 30 - 10.
+    $inclusive = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'anthropic/claude-test',
+        'input_token_semantic' => 'inclusive',
+        'usage' => ['promptTokens' => 100, 'cacheReadInputTokens' => 30, 'cacheWriteInputTokens' => 10],
+    ]);
+
     expect($observation->usage->toArray()['input_tokens'])->toBe('100')
+        ->and($inclusive->usage->toArray()['input_tokens'])->toBe('60')
         ->and(fn () => (new LaravelAiObservationAdapter)->adapt([
             'provider' => 'local-llama',
             'model' => 'llama-test',
@@ -1439,4 +1455,393 @@ it('ignores a raw TTL split that cannot be attributed to the reported aggregate'
     ]],
     'non-integer split' => [new ProviderResponseFixture(['usage' => ['cache_creation' => ['ephemeral_5m_input_tokens' => '148', 'ephemeral_1h_input_tokens' => 100]]]), null],
     'raw without a split' => [new ProviderResponseFixture(['usage' => ['cache_creation_input_tokens' => 248]]), null],
+]);
+
+function webSearchDefinition(): PriceDefinition
+{
+    return new PriceDefinition(
+        new ModelIdentity('anthropic', 'claude-search-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '2', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '10', '1000000'),
+            'web_searches' => new Rate('web_searches', '10', '1000'),
+        ],
+        PricingSource::Configured,
+    );
+}
+
+it('maps the reported server-side web search count to web_searches', function (object $adapter, bool $objectBreakdown): void {
+    $serverTools = ['web_search_requests' => 3];
+    $observation = $adapter->adapt([
+        'provider' => 'anthropic',
+        'model' => 'claude-search-test',
+        'usage' => [
+            'input_tokens' => 1_000,
+            'output_tokens' => 500,
+            'server_tool_use' => $objectBreakdown ? (object) $serverTools : $serverTools,
+        ],
+    ]);
+    $quote = (new CostCalculator)->calculate($observation->usage, webSearchDefinition());
+
+    // 1,000 x 2/M + 500 x 10/M + 3 x 10/1,000 = 0.002 + 0.005 + 0.03 = 0.037.
+    expect($observation->usage->toArray())->toMatchArray(['web_searches' => '3'])
+        ->and((string) $quote->cost?->amount)->toBe('0.037')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete);
+})->with([
+    'normalized array' => [new NormalizedObservationAdapter, false],
+    'Claude object' => [new ClaudeObservationAdapter, true],
+    'gateway array' => [new GatewayObservationAdapter, false],
+    'Laravel AI raw usage' => [new LaravelAiObservationAdapter, false],
+]);
+
+it('lets an explicit web_searches unit win over the nested server tool count', function (): void {
+    $observation = (new NormalizedObservationAdapter)->adapt([
+        'provider' => 'anthropic',
+        'model' => 'claude-search-test',
+        'usage' => ['input_tokens' => 1, 'web_searches' => 2, 'server_tool_use' => ['web_search_requests' => 5]],
+    ]);
+
+    expect($observation->usage->toArray()['web_searches'])->toBe('2');
+});
+
+it('counts web searches from every laravel/ai step raw response', function (string $provider, ?string $engine, string $unit, string $cost, CostCompleteness $completeness): void {
+    $steps = new Collection([
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 2]]])],
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['output_tokens' => 10]])],
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 1]]])],
+    ]);
+    $finalStepOnly = new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 1]]]);
+    $value = [
+        'usage' => (object) ['inputTokens' => 1_000, 'outputTokens' => 500, 'cacheReadInputTokens' => null, 'cacheWriteInputTokens' => null, 'reasoningTokens' => null],
+        'meta' => (object) ['provider' => $provider, 'model' => 'claude-search-test'],
+        'raw' => $finalStepOnly,
+        'steps' => $steps,
+    ];
+
+    if ($engine !== null) {
+        $value['web_search_engine'] = $engine;
+    }
+
+    $observation = (new LaravelAiObservationAdapter)->adapt($value);
+    $quote = (new CostCalculator)->calculate($observation->usage, webSearchDefinition());
+
+    // Three searches across the steps, not the final step's one. Native:
+    // 0.002 + 0.005 + 3 x 0.01 = 0.037. An OpenRouter count of unknown engine
+    // is a distinct unpriced unit: 0.002 + 0.005 = 0.007, partial.
+    expect($observation->usage->toArray())->toMatchArray([$unit => '3'])
+        ->and((string) $quote->cost?->amount)->toBe($cost)
+        ->and($quote->completeness)->toBe($completeness);
+})->with([
+    'Anthropic native search' => ['anthropic', null, 'web_searches', '0.037', CostCompleteness::Complete],
+    'OpenRouter, engine unknown' => ['openrouter', null, 'openrouter_web_searches', '0.007', CostCompleteness::Partial],
+    'OpenRouter, Exa engine' => ['openrouter', 'exa', 'openrouter_web_searches', '0.007', CostCompleteness::Partial],
+    'OpenRouter, declared native engine' => ['openrouter', 'native', 'web_searches', '0.037', CostCompleteness::Complete],
+]);
+
+it('never prices an OpenRouter search of unknown or non-native engine as a native search', function (?string $engine): void {
+    $value = [
+        'provider' => 'openrouter',
+        'model' => 'anthropic/claude-sonnet-5.5-standard-max',
+        'usage' => ['input_tokens' => 1_000, 'output_tokens' => 500, 'server_tool_use' => ['web_search_requests' => 1]],
+    ];
+
+    if ($engine !== null) {
+        $value['web_search_engine'] = $engine;
+    }
+
+    $definition = packagePricingDefinition('openrouter:anthropic/claude-sonnet-5.5-standard-max');
+
+    foreach ([new NormalizedObservationAdapter, new GatewayObservationAdapter, new LaravelAiObservationAdapter] as $adapter) {
+        $usage = $adapter->adapt($value)->usage;
+        $quote = (new CostCalculator)->calculate($usage, $definition);
+
+        // An Exa deep-reasoning search costs 0.015, more than the 0.01 native
+        // rate, so the count stays unpriced: 1,000 x 2.2/M + 500 x 11/M = 0.0077.
+        expect($usage->toArray())->toMatchArray(['openrouter_web_searches' => '1'])
+            ->not->toHaveKey('web_searches')
+            ->and((string) $quote->cost?->amount)->toBe('0.0077')
+            ->and($quote->completeness)->toBe(CostCompleteness::Partial)
+            ->and($quote->missingUnits)->toBe(['openrouter_web_searches']);
+    }
+})->with([
+    'engine not declared' => [null],
+    'auto, which may fall back to Exa' => ['auto'],
+    'Exa' => ['exa'],
+    'Perplexity' => ['Perplexity'],
+]);
+
+it('prices an OpenRouter search as native when the caller declares the native engine', function (): void {
+    $observation = (new NormalizedObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'anthropic/claude-sonnet-5.5-standard-max',
+        'webSearchEngine' => 'Native',
+        'usage' => ['input_tokens' => 1_000, 'output_tokens' => 500, 'server_tool_use' => ['web_search_requests' => 1]],
+    ]);
+    $quote = (new CostCalculator)->calculate($observation->usage, packagePricingDefinition('openrouter:anthropic/claude-sonnet-5.5-standard-max'));
+
+    // 0.0077 + 1 x 0.01 native Anthropic search passed through by OpenRouter.
+    expect((string) $quote->cost?->amount)->toBe('0.0177')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and(fn () => (new NormalizedObservationAdapter)->adapt([
+            'provider' => 'openrouter',
+            'model' => 'anthropic/claude-sonnet-5.5-standard-max',
+            'web_search_engine' => ['native'],
+            'usage' => ['input_tokens' => 1],
+        ]))->toThrow(InvalidArgumentException::class, 'web search engine must be a non-empty string');
+});
+
+it('keeps caller-supplied search units and provider-reported cost ahead of the OpenRouter count', function (): void {
+    $explicit = (new NormalizedObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'anthropic/claude-sonnet-5.5-standard-max',
+        'usage' => ['input_tokens' => 1_000, 'web_searches' => 2, 'server_tool_use' => ['web_search_requests' => 5]],
+    ])->usage->toArray();
+    $explicitOpenRouter = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'anthropic/claude-sonnet-5.5-standard-max',
+        'usage' => ['inputTokens' => 1_000, 'outputTokens' => 0, 'openrouter_web_searches' => 2],
+        'raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 5]]]),
+    ])->usage->toArray();
+    $reported = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'openrouter',
+        'model' => 'anthropic/claude-sonnet-5.5-standard-max',
+        'cost' => '0.0123',
+        'usage' => ['inputTokens' => 1_000, 'outputTokens' => 0],
+        'raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 5]]]),
+    ]);
+    $quote = (new PricingResolver(...array_fill(0, 3, packagePricingCatalog())))->resolve($reported);
+
+    expect($explicit)->toMatchArray(['web_searches' => '2'])->not->toHaveKey('openrouter_web_searches')
+        ->and($explicitOpenRouter)->toMatchArray(['openrouter_web_searches' => '2'])->not->toHaveKey('web_searches')
+        ->and($reported->usage->toArray())->toMatchArray(['openrouter_web_searches' => '5'])
+        ->and((string) $quote->cost?->amount)->toBe('0.0123')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->source)->toBe(PricingSource::ProviderReported);
+});
+
+function packagePricingCatalog(): PackagePricingSource
+{
+    /** @var array{version: int, retrieved_at: string, effective_at: string|null, currency: string, fallback_blocked?: list<string>, aliases?: array<string, string>, prices: array<string, array{source: string, notes?: string, rates: array<string, array{amount: string|int, per: string|int}>}>} $snapshot */
+    $snapshot = require __DIR__.'/../../resources/pricing/provider-skus.php';
+
+    return new PackagePricingSource($snapshot);
+}
+
+function packagePricingDefinition(string $key): PriceDefinition
+{
+    [$provider, $model] = explode(':', $key, 2);
+    $definition = packagePricingCatalog()->find(new ModelIdentity($provider, $model));
+    assert($definition !== null);
+
+    return $definition;
+}
+
+it('does not invent a web search count from a laravel/ai response it cannot read', function (mixed $raw, mixed $steps, ?int $incomplete): void {
+    $observation = (new LaravelAiObservationAdapter)->adapt([
+        'usage' => (object) ['inputTokens' => 1_000, 'outputTokens' => 500],
+        'meta' => (object) ['provider' => 'anthropic', 'model' => 'claude-search-test'],
+        'raw' => $raw,
+        'steps' => $steps,
+    ]);
+    $quote = (new CostCalculator)->calculate($observation->usage, webSearchDefinition());
+
+    expect($observation->usage->toArray())->not->toHaveKey('web_searches')->not->toHaveKey('openrouter_web_searches');
+
+    if ($incomplete === null) {
+        // Nothing readable reports a search: the documented streamed limitation.
+        expect($observation->usage->toArray())->not->toHaveKey('web_search_requests_incomplete')
+            ->and($quote->completeness)->toBe(CostCompleteness::Complete);
+    } else {
+        // A readable step searched but another step is unknown, so the quote
+        // is partial: 1,000 x 2/M + 500 x 10/M = 0.007 without the searches.
+        expect($observation->usage->toArray())->toMatchArray(['web_search_requests_incomplete' => (string) $incomplete])
+            ->and((string) $quote->cost?->amount)->toBe('0.007')
+            ->and($quote->completeness)->toBe(CostCompleteness::Partial)
+            ->and($quote->missingUnits)->toBe(['web_search_requests_incomplete']);
+    }
+})->with([
+    'streamed response without raw' => [null, null, null],
+    'one step without raw' => [null, [
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 2]]])],
+        (object) ['raw' => null],
+    ], 2],
+    'one step with a malformed count' => [null, [
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 2]]])],
+        (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => '1']]])],
+    ], 2],
+    'non-integer count' => [new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => '2']]]), null, null],
+    'no searches reported' => [new ProviderResponseFixture(['usage' => ['input_tokens' => 1_000]]), null, null],
+]);
+
+it('keeps a quote partial when only some laravel/ai steps report their searches', function (string $provider, array $options, string $basis, string $cost): void {
+    $adapter = $provider === 'router-prod'
+        ? new LaravelAiObservationAdapter(providerDrivers: ['router-prod' => 'openrouter'])
+        : new LaravelAiObservationAdapter;
+    $observation = $adapter->adapt([
+        ...$options,
+        'provider' => $provider,
+        'model' => 'anthropic/claude-sonnet-5.5-standard-max',
+        'usage' => (object) ['inputTokens' => 1_000, 'outputTokens' => 500, 'cacheReadInputTokens' => null, 'cacheWriteInputTokens' => null, 'reasoningTokens' => null],
+        'steps' => new Collection([
+            (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 2]]])],
+            (object) ['raw' => null],
+        ]),
+    ]);
+    $definition = $basis === 'snapshot'
+        ? packagePricingDefinition('openrouter:anthropic/claude-sonnet-5.5-standard-max')
+        : webSearchDefinition();
+    $quote = (new CostCalculator)->calculate($observation->usage, $definition);
+
+    // Step 2's searches are unknown, so even a declared native engine cannot
+    // price the two known searches as the whole count.
+    expect($observation->usage->toArray())->toMatchArray(['web_search_requests_incomplete' => '2'])
+        ->not->toHaveKey('web_searches')
+        ->not->toHaveKey('openrouter_web_searches')
+        ->and((string) $quote->cost?->amount)->toBe($cost)
+        ->and($quote->completeness)->toBe(CostCompleteness::Partial)
+        ->and($quote->missingUnits)->toBe(['web_search_requests_incomplete']);
+})->with([
+    // 1,000 x 2.2/M + 500 x 11/M = 0.0077.
+    'OpenRouter' => ['openrouter', [], 'snapshot', '0.0077'],
+    'OpenRouter, declared native engine' => ['openrouter', ['web_search_engine' => 'native'], 'snapshot', '0.0077'],
+    'custom provider routed through OpenRouter' => ['router-prod', [], 'snapshot', '0.0077'],
+    // 1,000 x 2/M + 500 x 10/M = 0.007.
+    'Anthropic native search' => ['anthropic', [], 'native', '0.007'],
+]);
+
+it('reads the TTL split and web searches from one-shot laravel/ai steps', function (bool $aggregate): void {
+    $generator = (function (): Generator {
+        yield (object) ['raw' => new ProviderResponseFixture(['usage' => [
+            'cache_creation' => ['ephemeral_5m_input_tokens' => 148, 'ephemeral_1h_input_tokens' => 0],
+            'server_tool_use' => ['web_search_requests' => 2],
+        ]])];
+        yield (object) ['raw' => new ProviderResponseFixture(['usage' => [
+            'cache_creation' => ['ephemeral_5m_input_tokens' => 0, 'ephemeral_1h_input_tokens' => 100],
+        ]])];
+    })();
+    $steps = $aggregate ? new class($generator) implements IteratorAggregate
+    {
+        public function __construct(private readonly Generator $steps) {}
+
+        public function getIterator(): Generator
+        {
+            return $this->steps;
+        }
+    } : $generator;
+
+    $usage = (new LaravelAiObservationAdapter)->adapt(laravelAiAnthropicResponse(raw: null, steps: $steps))->usage->toArray();
+
+    expect($usage)->toMatchArray([
+        'cache_write_input_tokens' => '248',
+        'cache_write_input_tokens_5m' => '148',
+        'cache_write_input_tokens_1h' => '100',
+        'web_searches' => '2',
+    ]);
+})->with([
+    'generator' => [false],
+    'aggregate returning the same generator' => [true],
+]);
+
+it('never bills an OpenAI cache write on top of the input tokens that include it', function (string $provider, array $usage): void {
+    // One OpenAI response: 1,000 input tokens, of which 200 were read from the
+    // cache and 300 were written to it, and 100 output tokens. Rates follow
+    // GPT-5.6 Terra: input 2/M, cached 0.2/M, cache write 2.5/M, output 12/M.
+    // Each input token bills exactly once:
+    //   500 uncached x 2/M + 200 x 0.2/M + 300 x 2.5/M + 100 x 12/M
+    //   = 0.001 + 0.00004 + 0.00075 + 0.0012 = 0.00299.
+    // Billing the write on top of an inclusive count would charge 800 uncached
+    // tokens plus the 300 written (0.00359).
+    $definition = new PriceDefinition(
+        new ModelIdentity($provider, 'gpt-cache-test'),
+        [
+            'input_tokens' => new Rate('input_tokens', '2', '1000000'),
+            'cached_input_tokens' => new Rate('cached_input_tokens', '0.2', '1000000'),
+            'cache_write_input_tokens' => new Rate('cache_write_input_tokens', '2.5', '1000000'),
+            'output_tokens' => new Rate('output_tokens', '12', '1000000'),
+        ],
+        PricingSource::Configured,
+    );
+    $observation = (new LaravelAiObservationAdapter)->adapt(['provider' => $provider, 'model' => 'gpt-cache-test', 'usage' => $usage]);
+    $quote = (new CostCalculator)->calculate($observation->usage, $definition);
+
+    expect($observation->usage->toArray())->toMatchArray([
+        'input_tokens' => '500',
+        'cached_input_tokens' => '200',
+        'cache_write_input_tokens' => '300',
+    ])
+        ->and((string) $quote->cost?->amount)->toBe('0.00299')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete);
+})->with([
+    // laravel/ai 1.x TextUsage: inputTokens is the provider's inclusive total.
+    'laravel/ai 1.x OpenAI' => ['openai', ['inputTokens' => 1_000, 'outputTokens' => 100, 'cacheReadInputTokens' => 200, 'cacheWriteInputTokens' => 300, 'reasoningTokens' => null]],
+    // laravel/ai 0.11.2 subtracts the cached and written tokens itself.
+    'laravel/ai 0.11 OpenAI' => ['openai', ['promptTokens' => 500, 'completionTokens' => 100, 'cacheWriteInputTokens' => 300, 'cacheReadInputTokens' => 200, 'reasoningTokens' => 0]],
+    // laravel/ai 0.11.2 subtracts OpenRouter's cache reads and writes from
+    // prompt_tokens itself (1,000 - 200 - 300), so the adapter must not again.
+    'laravel/ai 0.11 OpenRouter OpenAI model' => ['openrouter', ['promptTokens' => 500, 'completionTokens' => 100, 'cacheWriteInputTokens' => 300, 'cacheReadInputTokens' => 200, 'reasoningTokens' => 0]],
+    // The same usage serialized by laravel/ai 0.11.2 Usage::toArray().
+    'laravel/ai 0.11 OpenRouter serialized usage' => ['openrouter', ['prompt_tokens' => 500, 'completion_tokens' => 100, 'cache_write_input_tokens' => 300, 'cache_read_input_tokens' => 200, 'reasoning_tokens' => 0]],
+    // laravel/ai 1.x reports OpenRouter's inclusive prompt_tokens as inputTokens.
+    'laravel/ai 1.x OpenRouter OpenAI model' => ['openrouter', ['inputTokens' => 1_000, 'outputTokens' => 100, 'cacheReadInputTokens' => 200, 'cacheWriteInputTokens' => 300, 'reasoningTokens' => null]],
+]);
+
+it('does not read a cache-write count from a raw OpenAI Responses usage payload', function (object $adapter): void {
+    $usage = $adapter->adapt([
+        'provider' => 'openai',
+        'model' => 'gpt-cache-test',
+        'usage' => [
+            'input_tokens' => 1_000,
+            'input_tokens_details' => ['cached_tokens' => 200, 'cache_write_tokens' => 300],
+            'output_tokens' => 100,
+        ],
+    ])->usage->toArray();
+
+    // The nested details are not partitions these adapters read, so the write
+    // can never bill on top of the inclusive input count.
+    expect($usage)->not->toHaveKey('cache_write_input_tokens')
+        ->and($usage['input_tokens'])->toBe('1000');
+})->with([new NormalizedObservationAdapter, new CodexObservationAdapter, new GatewayObservationAdapter]);
+
+it('treats a custom provider name with an OpenRouter driver as OpenRouter for search counts', function (string $routing, string $source, ?string $engine, string $unit, string $cost, CostCompleteness $completeness): void {
+    $usage = ['inputTokens' => 1_000, 'outputTokens' => 500, 'cacheReadInputTokens' => null, 'cacheWriteInputTokens' => null, 'reasoningTokens' => null];
+    $value = ['provider' => 'router-prod', 'model' => 'claude-search-test'];
+    $adapter = new LaravelAiObservationAdapter;
+
+    if ($routing === 'configured mapping') {
+        $adapter = new LaravelAiObservationAdapter(providerDrivers: ['router-prod' => 'openrouter']);
+    } else {
+        $value['driver'] = 'OpenRouter';
+    }
+
+    if ($source === 'nested') {
+        $usage['server_tool_use'] = ['web_search_requests' => 2];
+    } else {
+        $value['steps'] = new Collection([
+            (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 1]]])],
+            (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 1]]])],
+        ]);
+    }
+
+    if ($engine !== null) {
+        $value['web_search_engine'] = $engine;
+    }
+
+    $observation = $adapter->adapt([...$value, 'usage' => $usage]);
+    $quote = (new CostCalculator)->calculate($observation->usage, webSearchDefinition());
+
+    // 1,000 x 2/M + 500 x 10/M = 0.007; two native searches add 2 x 0.01.
+    expect($observation->identity->key())->toBe('router-prod:claude-search-test')
+        ->and($observation->usage->toArray())->toMatchArray([$unit => '2'])
+        ->and((string) $quote->cost?->amount)->toBe($cost)
+        ->and($quote->completeness)->toBe($completeness);
+})->with([
+    'configured mapping',
+    'explicit driver',
+])->with([
+    'nested',
+    'raw steps',
+])->with([
+    'engine not declared' => [null, 'openrouter_web_searches', '0.007', CostCompleteness::Partial],
+    'Exa engine' => ['exa', 'openrouter_web_searches', '0.007', CostCompleteness::Partial],
+    'declared native engine' => ['native', 'web_searches', '0.027', CostCompleteness::Complete],
 ]);

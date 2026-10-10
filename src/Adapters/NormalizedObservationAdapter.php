@@ -29,7 +29,7 @@ class NormalizedObservationAdapter implements ObservationAdapter
         }
 
         $usage = $this->record(is_array($usage) ? $usage : get_object_vars($usage));
-        $units = $this->normalizeUsage($usage);
+        $units = $this->normalizeUsage($usage, $this->routesThroughOpenRouter($data, $identity), $this->webSearchEngine($data));
         $cost = $data['cost'] ?? $data['provider_cost'] ?? null;
         $currency = is_string($data['currency'] ?? null) ? $data['currency'] : 'USD';
 
@@ -48,7 +48,7 @@ class NormalizedObservationAdapter implements ObservationAdapter
     /** @param array<string, mixed> $data
      * @return array<string, string|int>
      */
-    private function normalizeUsage(array $data): array
+    private function normalizeUsage(array $data, bool $openRouter, ?string $webSearchEngine): array
     {
         $aliases = [
             'input_tokens' => ['input_tokens', 'prompt_tokens', 'inputTokens', 'promptTokens'],
@@ -91,7 +91,78 @@ class NormalizedObservationAdapter implements ObservationAdapter
             }
         }
 
-        return [...$units, ...$this->cacheWriteTtlUnits($data, $units)];
+        return [...$units, ...$this->cacheWriteTtlUnits($data, $units), ...$this->webSearchUnits($data, $units, $openRouter, $webSearchEngine)];
+    }
+
+    /**
+     * Map the server-side web search count Anthropic and OpenRouter report.
+     *
+     * Both report usage.server_tool_use.web_search_requests. Anthropic counts
+     * its native search, which maps to web_searches. OpenRouter counts every
+     * engine it ran (native, Exa, Firecrawl, Parallel or Perplexity, each
+     * billed differently) and does not say which, so its count maps to the
+     * distinct, unpriced openrouter_web_searches unit and keeps the quote
+     * partial. Only a caller that declares the native engine
+     * (web_search_engine: native) gets web_searches for an OpenRouter count.
+     * An explicit flat web_searches or openrouter_web_searches unit wins.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, string|int>  $units
+     * @return array<string, string|int>
+     */
+    private function webSearchUnits(array $data, array $units, bool $openRouter, ?string $webSearchEngine): array
+    {
+        $serverTools = $data['server_tool_use'] ?? null;
+
+        if (is_object($serverTools)) {
+            $serverTools = get_object_vars($serverTools);
+        }
+
+        $value = is_array($serverTools) ? ($serverTools['web_search_requests'] ?? null) : null;
+
+        if (array_key_exists('web_searches', $units)
+            || array_key_exists('openrouter_web_searches', $units)
+            || (! is_int($value) && ! (is_string($value) && is_numeric($value)))) {
+            return [];
+        }
+
+        $native = ! $openRouter || $webSearchEngine === 'native';
+
+        return [$native ? 'web_searches' : 'openrouter_web_searches' => $value];
+    }
+
+    /**
+     * Whether the request ran through OpenRouter.
+     *
+     * The canonical openrouter provider, or an openrouter driver under a
+     * custom provider name (the Laravel AI adapter passes its resolved
+     * driver, including configured provider-to-driver mappings). The pricing
+     * identity is not changed.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function routesThroughOpenRouter(array $data, ModelIdentity $identity): bool
+    {
+        $driver = $data['driver'] ?? $data['provider_driver'] ?? $data['providerDriver'] ?? null;
+
+        return strtolower(trim($identity->provider)) === 'openrouter'
+            || (is_string($driver) && strtolower(trim($driver)) === 'openrouter');
+    }
+
+    /**
+     * Read the search engine the caller declares its OpenRouter request ran.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function webSearchEngine(array $data): ?string
+    {
+        $engine = $data['web_search_engine'] ?? $data['webSearchEngine'] ?? null;
+
+        if ($engine !== null && (! is_string($engine) || trim($engine) === '')) {
+            throw new InvalidArgumentException('The web search engine must be a non-empty string.');
+        }
+
+        return $engine === null ? null : strtolower(trim($engine));
     }
 
     /**

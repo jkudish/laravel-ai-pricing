@@ -10,10 +10,23 @@ use InvalidArgumentException;
 use Jkudish\LaravelAiPricing\ValueObjects\PricingObservation;
 use Override;
 use Throwable;
+use Traversable;
 
 final class LaravelAiObservationAdapter implements ObservationAdapter
 {
-    private const array INCLUSIVE_DRIVERS = ['openrouter', 'groq', 'openai-compatible', 'deepseek', 'mistral'];
+    /**
+     * laravel/ai 0.x drivers whose promptTokens is the provider's raw, cache-inclusive count.
+     *
+     * The Groq, OpenAI-compatible and Mistral parsers pass prompt_tokens
+     * through unchanged in every 0.x release. The OpenRouter parser subtracts
+     * cache reads and writes itself from v0.11.1 and the DeepSeek parser
+     * subtracts cache hits from v0.11.0, so their 0.x usage is read as
+     * cache-exclusive: subtracting again would bill cached tokens as free.
+     * Earlier 0.x releases of those two drivers reported the inclusive count
+     * and are now overstated rather than understated; pass an inclusive
+     * input token semantic for them.
+     */
+    private const array INCLUSIVE_DRIVERS = ['groq', 'openai-compatible', 'mistral'];
 
     private const array EXCLUSIVE_REASONING_DRIVERS = ['gemini', 'xai'];
 
@@ -44,6 +57,13 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             $data = $this->record([...get_object_vars($data['meta']), ...$data]);
         } elseif (is_array($data['meta'] ?? null)) {
             $data = $this->record([...$data['meta'], ...$data]);
+        }
+
+        // The provider cost, the cache-write TTL split and the web search count
+        // each read the steps, so a possibly one-shot traversable is
+        // materialized once.
+        if (($data['steps'] ?? null) instanceof Traversable) {
+            $data['steps'] = iterator_to_array($data['steps'], false);
         }
 
         if (! isset($data['usage']) && array_key_exists('tokens', $data)) {
@@ -112,6 +132,33 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
 
                 $data['usage'] = $usage;
             }
+
+            // The recovered count takes the reported shape, so the normalized
+            // adapter applies one engine rule to raw and nested counts alike.
+            if (! array_key_exists('web_searches', $usage)
+                && ! array_key_exists('openrouter_web_searches', $usage)
+                && ! array_key_exists('server_tool_use', $usage)) {
+                [$searches, $complete] = $this->rawWebSearchRequests($data);
+
+                // A count from only some steps is a lower bound: it stays an
+                // unpriced unit so the quote is partial, never a complete
+                // undercount, whatever engine was declared.
+                if ($searches > 0) {
+                    $usage[$complete ? 'server_tool_use' : 'web_search_requests_incomplete'] = $complete
+                        ? ['web_search_requests' => $searches]
+                        : $searches;
+                    $data['usage'] = $usage;
+                }
+            }
+        }
+
+        // Hand the resolved driver, including a configured mapping, to the
+        // normalized adapter so its search rule recognizes a custom provider
+        // name that routes through OpenRouter.
+        $driver = $this->resolvedDriver($data, $provider);
+
+        if (is_string($driver)) {
+            $data['driver'] = $driver;
         }
 
         return $this->normalized->adapt($this->record($data));
@@ -346,18 +393,93 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
      * Recover Anthropic's TTL split of cache writes from the raw provider responses.
      *
      * laravel/ai normalizes Anthropic usage to a single cacheWriteInputTokens
-     * aggregate and drops usage.cache_creation, but a non-streamed response
-     * keeps the provider's HTTP response on its public raw property. A
-     * multi-step response sums every step's raw split, because the top-level
-     * raw response only describes the final step. Any step without a readable
-     * split, a streamed response, or a serialized response yields null; the
-     * caller also discards a split that does not sum to the reported
-     * aggregate, so the aggregate is never re-attributed by guesswork.
+     * aggregate and drops usage.cache_creation. The split is summed across
+     * every step's raw response (see rawResponsePayloads). A response without
+     * a readable split yields null; the caller also discards a split that does
+     * not sum to the reported aggregate, so the aggregate is never
+     * re-attributed by guesswork.
      *
      * @param  array<string, mixed>  $data
      * @return array{ephemeral_5m_input_tokens: int, ephemeral_1h_input_tokens: int}|null
      */
     private function rawCacheWriteTtlSplit(array $data): ?array
+    {
+        $payloads = $this->rawResponsePayloads($data);
+
+        if (in_array(null, $payloads, true)) {
+            return null;
+        }
+
+        $total = ['ephemeral_5m_input_tokens' => 0, 'ephemeral_1h_input_tokens' => 0];
+
+        foreach ($payloads as $payload) {
+            $breakdown = data_get($payload, 'usage.cache_creation');
+
+            if (! is_array($breakdown)) {
+                return null;
+            }
+
+            $fiveMinute = $breakdown['ephemeral_5m_input_tokens'] ?? 0;
+            $oneHour = $breakdown['ephemeral_1h_input_tokens'] ?? 0;
+
+            if (! is_int($fiveMinute) || ! is_int($oneHour) || $fiveMinute < 0 || $oneHour < 0) {
+                return null;
+            }
+
+            $total['ephemeral_5m_input_tokens'] += $fiveMinute;
+            $total['ephemeral_1h_input_tokens'] += $oneHour;
+        }
+
+        return $total;
+    }
+
+    /**
+     * Count server-side web searches from the raw provider responses.
+     *
+     * Anthropic and OpenRouter report usage.server_tool_use.web_search_requests,
+     * which laravel/ai drops from its normalized usage; the normalized adapter
+     * decides which unit it prices. The count is summed across every step's
+     * raw response, and a step that reports no searches counts zero. A step
+     * without a readable response or with a malformed count makes the total
+     * incomplete: the readable steps' sum is then only a lower bound. A
+     * streamed or serialized response has no readable step at all.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{0: int, 1: bool} The known count and whether it covers every step.
+     */
+    private function rawWebSearchRequests(array $data): array
+    {
+        $total = 0;
+        $complete = true;
+
+        foreach ($this->rawResponsePayloads($data) as $payload) {
+            $count = $payload === null ? null : data_get($payload, 'usage.server_tool_use.web_search_requests', 0);
+
+            if (! is_int($count) || $count < 0) {
+                $complete = false;
+
+                continue;
+            }
+
+            $total += $count;
+        }
+
+        return [$total, $complete];
+    }
+
+    /**
+     * Decode the provider response behind every laravel/ai step.
+     *
+     * A non-streamed response keeps the provider's HTTP response on its public
+     * raw property. A multi-step response is read step by step, because the
+     * top-level raw response only describes the final step. A step without a
+     * readable JSON response, or a streamed or serialized response with no
+     * raw response, is a null entry.
+     *
+     * @param  array<string, mixed>  $data
+     * @return non-empty-list<array<mixed>|null>
+     */
+    private function rawResponsePayloads(array $data): array
     {
         $steps = data_get($data, 'steps');
 
@@ -366,31 +488,22 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
         }
 
         if (is_iterable($steps)) {
-            $total = null;
+            $payloads = [];
 
             foreach ($steps as $step) {
-                $split = $this->rawResponseTtlSplit(data_get($step, 'raw'));
-
-                if ($split === null) {
-                    return null;
-                }
-
-                $total = $total === null ? $split : [
-                    'ephemeral_5m_input_tokens' => $total['ephemeral_5m_input_tokens'] + $split['ephemeral_5m_input_tokens'],
-                    'ephemeral_1h_input_tokens' => $total['ephemeral_1h_input_tokens'] + $split['ephemeral_1h_input_tokens'],
-                ];
+                $payloads[] = $this->rawResponsePayload(data_get($step, 'raw'));
             }
 
-            if ($total !== null) {
-                return $total;
+            if ($payloads !== []) {
+                return $payloads;
             }
         }
 
-        return $this->rawResponseTtlSplit($data['raw'] ?? null);
+        return [$this->rawResponsePayload($data['raw'] ?? null)];
     }
 
-    /** @return array{ephemeral_5m_input_tokens: int, ephemeral_1h_input_tokens: int}|null */
-    private function rawResponseTtlSplit(mixed $raw): ?array
+    /** @return array<mixed>|null */
+    private function rawResponsePayload(mixed $raw): ?array
     {
         if (! is_object($raw) || ! is_callable([$raw, 'json'])) {
             return null;
@@ -402,20 +515,7 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             return null;
         }
 
-        $breakdown = is_array($payload) ? data_get($payload, 'usage.cache_creation') : null;
-
-        if (! is_array($breakdown)) {
-            return null;
-        }
-
-        $fiveMinute = $breakdown['ephemeral_5m_input_tokens'] ?? 0;
-        $oneHour = $breakdown['ephemeral_1h_input_tokens'] ?? 0;
-
-        if (! is_int($fiveMinute) || ! is_int($oneHour) || $fiveMinute < 0 || $oneHour < 0) {
-            return null;
-        }
-
-        return ['ephemeral_5m_input_tokens' => $fiveMinute, 'ephemeral_1h_input_tokens' => $oneHour];
+        return is_array($payload) ? $payload : null;
     }
 
     private function mappedDriver(string $provider): ?string
