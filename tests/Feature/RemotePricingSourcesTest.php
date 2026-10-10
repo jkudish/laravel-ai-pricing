@@ -7,9 +7,11 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
+use Jkudish\LaravelAiPricing\Facades\AiPricing;
 use Jkudish\LaravelAiPricing\Sources\OpenRouterPricingSource;
 use Jkudish\LaravelAiPricing\Sources\PortkeyPricingSource;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
+use Jkudish\LaravelAiPricing\ValueObjects\Usage;
 
 function openRouterSource(bool $offline = false, string $endpoint = 'https://openrouter.test/api/v1/models'): OpenRouterPricingSource
 {
@@ -469,4 +471,39 @@ it('returns no definition on network failure so missing pricing cannot block', f
     ]);
 
     expect(openRouterSource()->find(new ModelIdentity('openrouter', 'missing')))->toBeNull();
+});
+
+it('does not let the live OpenRouter catalog price the fallback-blocked generic Gemini 3.1 Flash Lite identity', function (): void {
+    Http::fake([
+        'https://openrouter.ai/*' => Http::response(['data' => [
+            [
+                'id' => 'google/gemini-3.1-flash-lite',
+                'pricing' => [
+                    'prompt' => '0.00000025',
+                    'completion' => '0.0000015',
+                    'input_cache_read' => '0.000000025',
+                    'input_cache_write' => '0.0000000833333333333333',
+                    'web_search' => '0.014',
+                ],
+            ],
+            [
+                'id' => 'google/gemini-3.1-flash-lite-preview',
+                'pricing' => ['prompt' => '0.00000025', 'completion' => '0.0000015'],
+            ],
+        ]]),
+    ]);
+
+    $usage = new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 100_000]);
+    $generic = AiPricing::quote('openrouter', 'google/gemini-3.1-flash-lite', $usage);
+    $basis = AiPricing::quote('openrouter', 'google/gemini-3.1-flash-lite-standard-max', $usage);
+    $unblocked = AiPricing::quote('openrouter', 'google/gemini-3.1-flash-lite-preview', $usage);
+
+    // Basis: 1M x 0.275/M + 0.1M x 1.65/M = 0.44. Live catalog for the
+    // unblocked preview: 1M x 0.25/M + 0.1M x 1.50/M = 0.4.
+    expect($generic->amount)->toBeNull()
+        ->and($generic->completeness->value)->toBe('unavailable')
+        ->and($basis->amount?->isEqualTo('0.44'))->toBeTrue()
+        ->and($basis->completeness->value)->toBe('complete')
+        ->and($unblocked->amount?->isEqualTo('0.4'))->toBeTrue()
+        ->and($unblocked->source->value)->toBe('provider_native');
 });

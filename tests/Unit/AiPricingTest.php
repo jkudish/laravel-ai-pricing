@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use GuzzleHttp\Psr7\Response as Psr7Response;
+use Illuminate\Http\Client\Response as HttpResponse;
 use Jkudish\LaravelAiPricing\Contracts\CostResolver;
 use Jkudish\LaravelAiPricing\Facades\AiPricing;
 use Jkudish\LaravelAiPricing\ResponseCostResolver;
@@ -175,4 +177,41 @@ it('lets a configured Jev account rate override the reviewed snapshot', function
 
     expect((string) $cost->amount)->toBe('0.03')
         ->and($cost->source->value)->toBe('configured');
+});
+
+it('costs an Anthropic response under the billing basis the caller enforced, not its generic model', function (): void {
+    // laravel/ai 1.0 Anthropic response shape: inclusive inputTokens, the
+    // cacheWriteInputTokens aggregate, and the provider's raw HTTP response.
+    $response = (object) [
+        'usage' => (object) [
+            'inputTokens' => 4096,
+            'outputTokens' => 503,
+            'cacheReadInputTokens' => 1800,
+            'cacheWriteInputTokens' => 248,
+            'reasoningTokens' => null,
+        ],
+        'meta' => (object) ['provider' => 'anthropic', 'model' => 'claude-haiku-5-5'],
+        'raw' => new HttpResponse(new Psr7Response(
+            body: '{"usage":{"input_tokens":2048,"cache_read_input_tokens":1800,"cache_creation_input_tokens":248,"cache_creation":{"ephemeral_5m_input_tokens":148,"ephemeral_1h_input_tokens":100},"output_tokens":503}}',
+            headers: ['Content-Type' => 'application/json'],
+        )),
+        'steps' => null,
+    ];
+
+    $generic = AiPricing::cost($response);
+    $basis = AiPricing::cost([
+        'provider' => 'anthropic',
+        'model' => 'claude-haiku-5-5-global-short',
+        'usage' => $response->usage,
+        'raw' => $response->raw,
+        'steps' => $response->steps,
+    ]);
+
+    // Haiku 5.5 global short, USD per million: 2048 x 0.10 + 1800 x 0.01 +
+    // 148 x 0.125 + 100 x 0.20 + 503 x 0.50 = 0.0005128.
+    expect($generic->amount)->toBeNull()
+        ->and($generic->completeness->value)->toBe('unavailable')
+        ->and((string) $basis->amount)->toBe('0.0005128')
+        ->and($basis->completeness->value)->toBe('complete')
+        ->and($basis->missingUnits)->toBe([]);
 });
