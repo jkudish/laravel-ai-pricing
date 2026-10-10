@@ -77,7 +77,8 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             $inclusive = $this->usesInclusivePromptTokens($data, $provider, $this->reportsInclusiveInputTokens($usage));
             $prompt = $usage['promptTokens'] ?? $usage['inputTokens'] ?? $usage['prompt_tokens'] ?? $usage['input_tokens'] ?? 0;
             $read = $usage['cacheReadInputTokens'] ?? $usage['cache_read_input_tokens'] ?? 0;
-            $write = $usage['cacheWriteInputTokens'] ?? $usage['cache_write_input_tokens'] ?? $usage['cache_creation_input_tokens'] ?? $usage['cacheCreationInputTokens'] ?? 0;
+            $reportedWrite = $usage['cacheWriteInputTokens'] ?? $usage['cache_write_input_tokens'] ?? $usage['cache_creation_input_tokens'] ?? $usage['cacheCreationInputTokens'] ?? null;
+            $write = $reportedWrite ?? 0;
 
             if (is_int($prompt) && is_int($read) && is_int($write)) {
                 $uncached = $inclusive
@@ -85,7 +86,6 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
                     : $prompt;
                 $usage['input_tokens'] = $uncached;
                 $usage['cached_input_tokens'] = $read;
-                $usage['cache_write_input_tokens'] = $write;
                 unset(
                     $usage['promptTokens'],
                     $usage['inputTokens'],
@@ -95,6 +95,12 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
                     $usage['cache_creation_input_tokens'],
                     $usage['cacheCreationInputTokens'],
                 );
+
+                // An absent aggregate defaults to zero, except next to a TTL
+                // split, where a synthetic zero would read as contradictory.
+                if ($reportedWrite !== null || ! $this->reportsCacheWriteTtlSplit($usage)) {
+                    $usage['cache_write_input_tokens'] = $write;
+                }
 
                 $split = $write > 0 && ! $this->reportsCacheWriteTtlSplit($usage)
                     ? $this->rawCacheWriteTtlSplit($data)

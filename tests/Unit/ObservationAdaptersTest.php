@@ -1318,6 +1318,24 @@ it('never bills a split larger than its reported aggregate at a generic cache-wr
         ->and($quote->missingUnits)->toBe(['cache_write_input_tokens', 'cache_write_input_tokens_5m', 'cache_write_input_tokens_1h']);
 });
 
+it('keeps standalone TTL cache writes complete through the Laravel AI adapter', function (): void {
+    $definition = new PriceDefinition(
+        new ModelIdentity('anthropic', 'claude-family-test'),
+        ['cache_write_input_tokens_5m' => new Rate('cache_write_input_tokens_5m', '5', '1000000')],
+        PricingSource::Configured,
+    );
+    $usage = (new LaravelAiObservationAdapter)->adapt([
+        'provider' => 'anthropic',
+        'model' => 'claude-family-test',
+        'usage' => ['cache_write_input_tokens_5m' => 200],
+    ])->usage;
+    $quote = (new CostCalculator)->calculate($usage, $definition);
+
+    expect($usage->toArray())->not->toHaveKey('cache_write_input_tokens')
+        ->and((string) $quote->cost?->amount)->toBe('0.001')
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete);
+});
+
 it('settles the cache-write family once without double billing the split or guessing a TTL', function (array $units, ?string $amount, array $missing): void {
     $definition = new PriceDefinition(
         new ModelIdentity('anthropic', 'claude-family-test'),
