@@ -51,7 +51,7 @@ final readonly class PricingResolver implements CostResolver
                 ?? $this->snapshot?->find($observation->identity);
         }
 
-        if ($pricing === null && $remoteCatalogsAllowed) {
+        if ($pricing === null && $remoteCatalogsAllowed && $this->nativeAllowsFallback($observation)) {
             $pricing = $this->fallback->find($observation->identity);
         }
 
@@ -80,5 +80,18 @@ final readonly class PricingResolver implements CostResolver
     {
         return ! $this->snapshot instanceof FallbackPolicy
             || $this->snapshot->allowsFallback($observation->identity);
+    }
+
+    /**
+     * Decide whether the fallback catalog may price an identity the native catalog declined.
+     *
+     * A native catalog can list a model whose pricing it cannot apply, such
+     * as OpenRouter's prompt-length tiers. The fallback catalog would price
+     * that model from a flat rate, so the native catalog's refusal stands.
+     */
+    private function nativeAllowsFallback(PricingObservation $observation): bool
+    {
+        return ! $this->native instanceof FallbackPolicy
+            || $this->native->allowsFallback($observation->identity);
     }
 }

@@ -9,8 +9,12 @@ use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 interface FallbackPolicy
 {
     /**
-     * Whether remote catalogs (the native OpenRouter catalog and the fallback
-     * catalog) may price the identity when nothing more authoritative does.
+     * Whether less authoritative catalogs may price the identity.
+     *
+     * The package snapshot answers for both remote catalogs (the native
+     * OpenRouter catalog and the fallback catalog). A native catalog answers
+     * for the fallback catalog only, refusing an identity it lists but
+     * cannot price.
      */
     public function allowsFallback(ModelIdentity $identity): bool;
 }
