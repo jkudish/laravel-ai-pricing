@@ -147,6 +147,15 @@ final class LaravelAiObservationAdapter implements ObservationAdapter
             }
         }
 
+        // Hand the resolved driver, including a configured mapping, to the
+        // normalized adapter so its search rule recognizes a custom provider
+        // name that routes through OpenRouter.
+        $driver = $this->resolvedDriver($data, $provider);
+
+        if (is_string($driver)) {
+            $data['driver'] = $driver;
+        }
+
         return $this->normalized->adapt($this->record($data));
     }
 

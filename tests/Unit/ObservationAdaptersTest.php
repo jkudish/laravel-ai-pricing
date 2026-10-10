@@ -1747,3 +1747,47 @@ it('does not read a cache-write count from a raw OpenAI Responses usage payload'
     expect($usage)->not->toHaveKey('cache_write_input_tokens')
         ->and($usage['input_tokens'])->toBe('1000');
 })->with([new NormalizedObservationAdapter, new CodexObservationAdapter, new GatewayObservationAdapter]);
+
+it('treats a custom provider name with an OpenRouter driver as OpenRouter for search counts', function (string $routing, string $source, ?string $engine, string $unit, string $cost, CostCompleteness $completeness): void {
+    $usage = ['inputTokens' => 1_000, 'outputTokens' => 500, 'cacheReadInputTokens' => null, 'cacheWriteInputTokens' => null, 'reasoningTokens' => null];
+    $value = ['provider' => 'router-prod', 'model' => 'claude-search-test'];
+    $adapter = new LaravelAiObservationAdapter;
+
+    if ($routing === 'configured mapping') {
+        $adapter = new LaravelAiObservationAdapter(providerDrivers: ['router-prod' => 'openrouter']);
+    } else {
+        $value['driver'] = 'OpenRouter';
+    }
+
+    if ($source === 'nested') {
+        $usage['server_tool_use'] = ['web_search_requests' => 2];
+    } else {
+        $value['steps'] = new Collection([
+            (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 1]]])],
+            (object) ['raw' => new ProviderResponseFixture(['usage' => ['server_tool_use' => ['web_search_requests' => 1]]])],
+        ]);
+    }
+
+    if ($engine !== null) {
+        $value['web_search_engine'] = $engine;
+    }
+
+    $observation = $adapter->adapt([...$value, 'usage' => $usage]);
+    $quote = (new CostCalculator)->calculate($observation->usage, webSearchDefinition());
+
+    // 1,000 x 2/M + 500 x 10/M = 0.007; two native searches add 2 x 0.01.
+    expect($observation->identity->key())->toBe('router-prod:claude-search-test')
+        ->and($observation->usage->toArray())->toMatchArray([$unit => '2'])
+        ->and((string) $quote->cost?->amount)->toBe($cost)
+        ->and($quote->completeness)->toBe($completeness);
+})->with([
+    'configured mapping',
+    'explicit driver',
+])->with([
+    'nested',
+    'raw steps',
+])->with([
+    'engine not declared' => [null, 'openrouter_web_searches', '0.007', CostCompleteness::Partial],
+    'Exa engine' => ['exa', 'openrouter_web_searches', '0.007', CostCompleteness::Partial],
+    'declared native engine' => ['native', 'web_searches', '0.027', CostCompleteness::Complete],
+]);

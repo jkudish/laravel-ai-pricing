@@ -29,7 +29,7 @@ class NormalizedObservationAdapter implements ObservationAdapter
         }
 
         $usage = $this->record(is_array($usage) ? $usage : get_object_vars($usage));
-        $units = $this->normalizeUsage($usage, $identity, $this->webSearchEngine($data));
+        $units = $this->normalizeUsage($usage, $this->routesThroughOpenRouter($data, $identity), $this->webSearchEngine($data));
         $cost = $data['cost'] ?? $data['provider_cost'] ?? null;
         $currency = is_string($data['currency'] ?? null) ? $data['currency'] : 'USD';
 
@@ -48,7 +48,7 @@ class NormalizedObservationAdapter implements ObservationAdapter
     /** @param array<string, mixed> $data
      * @return array<string, string|int>
      */
-    private function normalizeUsage(array $data, ModelIdentity $identity, ?string $webSearchEngine): array
+    private function normalizeUsage(array $data, bool $openRouter, ?string $webSearchEngine): array
     {
         $aliases = [
             'input_tokens' => ['input_tokens', 'prompt_tokens', 'inputTokens', 'promptTokens'],
@@ -91,7 +91,7 @@ class NormalizedObservationAdapter implements ObservationAdapter
             }
         }
 
-        return [...$units, ...$this->cacheWriteTtlUnits($data, $units), ...$this->webSearchUnits($data, $units, $identity, $webSearchEngine)];
+        return [...$units, ...$this->cacheWriteTtlUnits($data, $units), ...$this->webSearchUnits($data, $units, $openRouter, $webSearchEngine)];
     }
 
     /**
@@ -110,7 +110,7 @@ class NormalizedObservationAdapter implements ObservationAdapter
      * @param  array<string, string|int>  $units
      * @return array<string, string|int>
      */
-    private function webSearchUnits(array $data, array $units, ModelIdentity $identity, ?string $webSearchEngine): array
+    private function webSearchUnits(array $data, array $units, bool $openRouter, ?string $webSearchEngine): array
     {
         $serverTools = $data['server_tool_use'] ?? null;
 
@@ -126,9 +126,27 @@ class NormalizedObservationAdapter implements ObservationAdapter
             return [];
         }
 
-        $native = strtolower(trim($identity->provider)) !== 'openrouter' || $webSearchEngine === 'native';
+        $native = ! $openRouter || $webSearchEngine === 'native';
 
         return [$native ? 'web_searches' : 'openrouter_web_searches' => $value];
+    }
+
+    /**
+     * Whether the request ran through OpenRouter.
+     *
+     * The canonical openrouter provider, or an openrouter driver under a
+     * custom provider name (the Laravel AI adapter passes its resolved
+     * driver, including configured provider-to-driver mappings). The pricing
+     * identity is not changed.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function routesThroughOpenRouter(array $data, ModelIdentity $identity): bool
+    {
+        $driver = $data['driver'] ?? $data['provider_driver'] ?? $data['providerDriver'] ?? null;
+
+        return strtolower(trim($identity->provider)) === 'openrouter'
+            || (is_string($driver) && strtolower(trim($driver)) === 'openrouter');
     }
 
     /**
