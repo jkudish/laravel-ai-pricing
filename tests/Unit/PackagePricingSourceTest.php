@@ -62,6 +62,38 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'xAI Grok 4.6' => ['xai', 'grok-4.6', 'searches', '5', '1000'],
     'xAI Grok 4.6 X Search posts' => ['xai', 'grok-4.6', 'x_search_posts', '5', '1000'],
     'xAI Grok 4.6 X Search profiles' => ['xai', 'grok-4.6', 'x_search_profiles', '10', '1000'],
+    'xAI Grok 4.7' => ['xai', 'grok-4.7', 'searches', '5', '1000'],
+    'xAI Grok 4.7 X Search posts' => ['xai', 'grok-4.7', 'x_search_posts', '5', '1000'],
+    'xAI Grok 4.7 X Search profiles' => ['xai', 'grok-4.7', 'x_search_profiles', '10', '1000'],
+]);
+
+it('prices web search on the Claude Sonnet 5.5 and GPT-6.1 Sol direct bases', function (string $key, string $source, array $tokenRates, array $usage, string $expectedCost): void {
+    [$provider, $model] = explode(':', $key, 2);
+    $definition = packagePricingSource()->find(new ModelIdentity($provider, $model));
+    expect($definition)->not->toBeNull();
+    assert($definition !== null);
+
+    expect(array_keys($definition->rates))->toBe([...array_keys($tokenRates), 'web_searches'])
+        ->and((string) $definition->rates['web_searches']->amount)->toBe('10')
+        ->and((string) $definition->rates['web_searches']->per)->toBe('1000')
+        ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toStartWith('Checked 2026-10-11.');
+
+    foreach ($tokenRates as $unit => $amount) {
+        expect((string) $definition->rates[$unit]->amount)->toBe($amount)
+            ->and((string) $definition->rates[$unit]->per)->toBe('1000000');
+    }
+
+    $quote = (new CostCalculator)->calculate(new Usage($usage), $definition);
+
+    expect((string) $quote->cost?->amount)->toBe($expectedCost)
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->provenance?->reference)->toBe($source);
+})->with([
+    // 100k x 2/M = 0.2 input, 100k x 10/M = 1 output, 100 x 10/1000 = 1 search.
+    'Claude Sonnet 5.5' => ['anthropic:claude-sonnet-5-5-global-standard', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '2', 'output_tokens' => '10', 'cached_input_tokens' => '0.10', 'cache_write_input_tokens_5m' => '2.50', 'cache_write_input_tokens_1h' => '4'], ['input_tokens' => 100_000, 'output_tokens' => 100_000, 'web_searches' => 100], '2.2'],
+    'GPT-6.1 Sol short' => ['openai:gpt-6.1-sol-standard-short', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '2', 'output_tokens' => '10', 'cached_input_tokens' => '0.10', 'cache_write_input_tokens' => '2.50'], ['input_tokens' => 100_000, 'output_tokens' => 100_000, 'web_searches' => 100], '2.2'],
+    // 300k x 4/M = 1.2 input, 100k x 15/M = 1.5 output, 3 x 10/1000 = 0.03 searches.
+    'GPT-6.1 Sol long' => ['openai:gpt-6.1-sol-standard-long', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '4', 'output_tokens' => '15', 'cached_input_tokens' => '0.20', 'cache_write_input_tokens' => '5'], ['input_tokens' => 300_000, 'output_tokens' => 100_000, 'web_searches' => 3], '2.73'],
 ]);
 
 it('quotes Claude Sonnet 5 global routing exactly and leaves undeclared billed units missing', function (): void {
@@ -240,13 +272,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T04:56:30+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T07:30:00+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T04:56:30+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T07:30:00+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -266,8 +298,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(13)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-11T04:56:30+00:00')
+    expect($snapshot['version'])->toBe(14)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-11T07:30:00+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -317,7 +349,7 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T04:56:30+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T07:30:00+00:00')
         ->and($definition->effectiveAt)->toBeNull()
         ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain('Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
@@ -327,11 +359,8 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($unknown->completeness)->toBe(CostCompleteness::Unavailable);
 })->with([
     ['anthropic:claude-opus-5-5-global-standard', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '4', 'output_tokens' => '20', 'cached_input_tokens' => '0.20', 'cache_write_input_tokens_5m' => '5', 'cache_write_input_tokens_1h' => '8'], '0.068'],
-    ['anthropic:claude-sonnet-5-5-global-standard', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '2', 'output_tokens' => '10', 'cached_input_tokens' => '0.10', 'cache_write_input_tokens_5m' => '2.50', 'cache_write_input_tokens_1h' => '4'], '0.034'],
     ['anthropic:claude-haiku-5-5-global-short', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '0.10', 'output_tokens' => '0.50', 'cached_input_tokens' => '0.01', 'cache_write_input_tokens_5m' => '0.125', 'cache_write_input_tokens_1h' => '0.20'], '0.0017'],
     ['anthropic:claude-haiku-5-5-global-long', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '0.50', 'output_tokens' => '2.50', 'cached_input_tokens' => '0.05', 'cache_write_input_tokens_5m' => '0.625', 'cache_write_input_tokens_1h' => '1'], '0.0085'],
-    ['openai:gpt-6.1-sol-standard-short', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '2', 'output_tokens' => '10', 'cached_input_tokens' => '0.10', 'cache_write_input_tokens' => '2.50'], '0.034'],
-    ['openai:gpt-6.1-sol-standard-long', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '4', 'output_tokens' => '15', 'cached_input_tokens' => '0.20', 'cache_write_input_tokens' => '5'], '0.053'],
     ['openai:gpt-6-luna-standard-short', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '0.10', 'output_tokens' => '0.50', 'cached_input_tokens' => '0.01', 'cache_write_input_tokens' => '0.125'], '0.0017'],
     ['openai:gpt-6-luna-standard-long', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '0.20', 'output_tokens' => '0.75', 'cached_input_tokens' => '0.02', 'cache_write_input_tokens' => '0.25'], '0.00265'],
     ['openai:decisions-gpt-6-luna-short', 'https://developers.openai.com/api/docs/guides/decisions', ['input_tokens' => '0.10', 'output_tokens' => '0', 'cached_input_tokens' => '0', 'cache_write_input_tokens' => '0'], '0.0002'],
@@ -464,6 +493,7 @@ it('covers every PHP parity profile with its pricing identity and disposition', 
     'gemini-deep/research' => ['gemini', 'deep-research', false],
     'grok-x-only/x' => ['xai', 'grok-4.6', true],
     'grok-combined/combined' => ['xai', 'grok-4.6', true],
+    'grok-x-only/x on Grok 4.7' => ['xai', 'grok-4.7', true],
     'parallel/search' => ['parallel', 'search', false],
     'parallel/turbo' => ['parallel', 'turbo', true],
     'parallel/research pro' => ['parallel', 'research-pro', true],
@@ -490,8 +520,8 @@ it('keeps variable components partial and missing or zero usage unavailable', fu
         ->and($zero->completeness)->toBe(CostCompleteness::Unavailable);
 });
 
-it('bills X Search per fetched post and profile after the 2026-09-21 xAI change', function (): void {
-    $xai = packagePricingSource()->find(new ModelIdentity('xai', 'grok-4.6'));
+it('bills X Search per fetched post and profile after the 2026-09-21 xAI change', function (string $model): void {
+    $xai = packagePricingSource()->find(new ModelIdentity('xai', $model));
 
     $mixed = (new CostCalculator)->calculate(
         new Usage([
@@ -506,7 +536,7 @@ it('bills X Search per fetched post and profile after the 2026-09-21 xAI change'
 
     // Hand-computed: 4 x 5/1000 = 0.02 web search calls, 3_000 x 5/1000 = 15
     // fetched posts, 500 x 10/1000 = 5 fetched profiles; 0.02 + 15 + 5 = 20.02.
-    // The token counts stay unpriced because grok-4.6 has context tiers.
+    // The token counts stay unpriced because both models have context tiers.
     expect((string) $mixed->cost?->amount)->toBe('20.02')
         ->and($mixed->completeness)->toBe(CostCompleteness::Partial)
         ->and($mixed->missingUnits)->toBe(['input_tokens', 'output_tokens'])
@@ -521,7 +551,7 @@ it('bills X Search per fetched post and profile after the 2026-09-21 xAI change'
     expect((string) $toolsOnly->cost?->amount)->toBe('7.5')
         ->and($toolsOnly->completeness)->toBe(CostCompleteness::Complete)
         ->and($toolsOnly->missingUnits)->toBe([]);
-});
+})->with(['grok-4.6', 'grok-4.7']);
 
 it('bills TypeSafe Jev input tokens only and keeps its published free output complete', function (): void {
     $jev = packagePricingSource()->find(new ModelIdentity('typesafe', 'jev-1.13.0'));

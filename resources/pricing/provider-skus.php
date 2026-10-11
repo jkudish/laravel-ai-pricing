@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 13,
-    'retrieved_at' => '2026-10-11T04:56:30+00:00',
+    'version' => 14,
+    'retrieved_at' => '2026-10-11T07:30:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -374,13 +374,14 @@ return [
         ],
         'anthropic:claude-sonnet-5-5-global-standard' => [
             'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
-            'notes' => 'Checked 2026-10-09. Billing basis for claude-sonnet-5-5, global geography, synchronous Messages API only; not a provider alias. All context lengths. Excludes US geography (1.1x), batch and server tools. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs.',
+            'notes' => 'Checked 2026-10-11. Billing basis for claude-sonnet-5-5, global geography (inference_geo global, the default), synchronous Messages API only; not a provider alias. All context lengths up to 1M tokens bill at one rate. Excludes US geography (1.1x), batch, Bedrock, Google Cloud and Foundry. Thinking is output usage. Cache reads are 0.05x input (0.10/M). Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs. web_searches counts usage.server_tool_use.web_search_requests at USD 10 per 1,000 searches (failed searches are not billed). Code execution, web fetch tokens and other server tools are not priced here.',
             'rates' => [
                 'input_tokens' => ['amount' => '2', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '10', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
                 'cache_write_input_tokens_5m' => ['amount' => '2.50', 'per' => '1000000'],
                 'cache_write_input_tokens_1h' => ['amount' => '4', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'anthropic:claude-haiku-5-5-global-short' => [
@@ -539,22 +540,24 @@ return [
         ],
         'openai:gpt-6.1-sol-standard-short' => [
             'source' => 'https://developers.openai.com/api/docs/pricing',
-            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, at most 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'notes' => 'Checked 2026-10-11. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, at most 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
             'rates' => [
                 'input_tokens' => ['amount' => '2', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '10', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
                 'cache_write_input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'openai:gpt-6.1-sol-standard-long' => [
             'source' => 'https://developers.openai.com/api/docs/pricing',
-            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, more than 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'notes' => 'Checked 2026-10-11. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, more than 272,000 input tokens; the long-context rates apply to the full request; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
             'rates' => [
                 'input_tokens' => ['amount' => '4', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '15', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
                 'cache_write_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'openai:gpt-6-luna-standard-short' => [
@@ -2552,6 +2555,15 @@ return [
             'rates' => [
                 'input_tokens' => ['amount' => '0.042', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '0', 'per' => '1000000'],
+            ],
+        ],
+        'xai:grok-4.7' => [
+            'source' => 'https://docs.x.ai/developers/pricing',
+            'notes' => 'Checked 2026-10-11. Web Search bills $5 per 1k calls (searches). X Search bills per item fetched: every post returned by a search or thread fetch, including parent and quoted posts, counts toward x_search_posts at $5 per 1k, and every profile returned by a user search counts toward x_search_profiles at $10 per 1k. Map usage.server_side_tool_usage_details web_search_calls to searches, x_posts_fetched to x_search_posts, and x_users_fetched to x_search_profiles; never map x_search_calls onto the per-item units. Token rates are omitted because grok-4.7 bills its long-context rates for the whole request once a prompt reaches 200k tokens ($2.00/$0.50/$6.00 per 1M input/cached/output below, $4.00/$1.00/$12.00 at or above) and US regional requests bill at 1.1x, which this snapshot cannot select safely.',
+            'rates' => [
+                'searches' => ['amount' => '5', 'per' => '1000'],
+                'x_search_posts' => ['amount' => '5', 'per' => '1000'],
+                'x_search_profiles' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'xai:grok-4.6' => [
