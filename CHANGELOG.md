@@ -7,9 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.0] - Unreleased
-
-A minor release: the date is set when the release is prepared and tagged.
+## [0.3.0] - 2026-10-11
 
 ### Added
 
