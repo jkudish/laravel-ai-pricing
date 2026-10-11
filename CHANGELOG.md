@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - Unreleased
+
+### Fixed
+
+- Pricing snapshot v16 (retrieved 2026-10-11) prices `web_searches` on `openai:gpt-6-luna-standard-short` and `openai:gpt-6-luna-standard-long` at USD 10 per 1,000 search calls, the web search price OpenAI lists for all models at <https://developers.openai.com/api/docs/pricing> (accessed 2026-10-11). GPT-6 Luna lists `web_search` as a supported Responses tool. Laravel AI Librarium's `openai-chat` Profile quotes against the `-short` basis, and before this fix any quote that included searches was partial. It is now complete. OpenAI usage reports no search count, so pass `web_searches` yourself. These two bases and `gpt-6.1-sol-standard-short`/`-long` are every OpenAI identity Laravel AI Librarium prices against; the GPT-6.1 Sol bases already priced web search. The non-reasoning `gpt-4.1`, `gpt-4.1-mini`, `gpt-4o`, `gpt-4o-mini` and `chat-latest` bases still leave web search unpriced, because the preview tool and the mini models' fixed 8,000-token search-content block bill differently.
+
 ## [0.3.0] - 2026-10-11
 
 ### Added
