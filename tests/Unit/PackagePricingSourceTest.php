@@ -78,7 +78,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'xAI Grok 4.7 X Search profiles' => ['xai', 'grok-4.7', 'x_search_profiles', '10', '1000'],
 ]);
 
-it('prices web search on the Claude Sonnet 5.5 and GPT-6.1 Sol direct bases', function (string $key, string $source, array $tokenRates, array $usage, string $expectedCost): void {
+it('prices web search on the Claude Sonnet 5.5, GPT-6.1 Sol and GPT-6 Luna direct bases', function (string $key, string $source, array $tokenRates, array $usage, string $expectedCost): void {
     [$provider, $model] = explode(':', $key, 2);
     $definition = packagePricingSource()->find(new ModelIdentity($provider, $model));
     expect($definition)->not->toBeNull();
@@ -105,6 +105,12 @@ it('prices web search on the Claude Sonnet 5.5 and GPT-6.1 Sol direct bases', fu
     'GPT-6.1 Sol short' => ['openai:gpt-6.1-sol-standard-short', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '2', 'output_tokens' => '10', 'cached_input_tokens' => '0.10', 'cache_write_input_tokens' => '2.50'], ['input_tokens' => 100_000, 'output_tokens' => 100_000, 'web_searches' => 100], '2.2'],
     // 300k x 4/M = 1.2 input, 100k x 15/M = 1.5 output, 3 x 10/1000 = 0.03 searches.
     'GPT-6.1 Sol long' => ['openai:gpt-6.1-sol-standard-long', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '4', 'output_tokens' => '15', 'cached_input_tokens' => '0.20', 'cache_write_input_tokens' => '5'], ['input_tokens' => 300_000, 'output_tokens' => 100_000, 'web_searches' => 3], '2.73'],
+    // The PHP canary's openai-chat run: 53,562 uncached input x 0.10/M = 0.0053562,
+    // 4,513 cache-write x 0.125/M = 0.000564125, 2,871 output x 0.50/M = 0.0014355,
+    // 5 searches x 10/1000 = 0.05.
+    'GPT-6 Luna short' => ['openai:gpt-6-luna-standard-short', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '0.10', 'output_tokens' => '0.50', 'cached_input_tokens' => '0.01', 'cache_write_input_tokens' => '0.125'], ['input_tokens' => 53_562, 'cache_write_input_tokens' => 4_513, 'output_tokens' => 2_871, 'web_searches' => 5], '0.057355825'],
+    // 300k x 0.20/M = 0.06 input, 100k x 0.75/M = 0.075 output, 3 x 10/1000 = 0.03 searches.
+    'GPT-6 Luna long' => ['openai:gpt-6-luna-standard-long', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '0.20', 'output_tokens' => '0.75', 'cached_input_tokens' => '0.02', 'cache_write_input_tokens' => '0.25'], ['input_tokens' => 300_000, 'output_tokens' => 100_000, 'web_searches' => 3], '0.165'],
 ]);
 
 it('quotes Claude Sonnet 5 global routing exactly and leaves undeclared billed units missing', function (): void {
@@ -283,13 +289,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:00:00+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:45:00+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:00:00+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:45:00+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -309,8 +315,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(15)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-11T09:00:00+00:00')
+    expect($snapshot['version'])->toBe(16)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-11T09:45:00+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -360,7 +366,7 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:00:00+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:45:00+00:00')
         ->and($definition->effectiveAt)->toBeNull()
         ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain('Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
@@ -372,8 +378,6 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
     ['anthropic:claude-opus-5-5-global-standard', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '4', 'output_tokens' => '20', 'cached_input_tokens' => '0.20', 'cache_write_input_tokens_5m' => '5', 'cache_write_input_tokens_1h' => '8'], '0.068'],
     ['anthropic:claude-haiku-5-5-global-short', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '0.10', 'output_tokens' => '0.50', 'cached_input_tokens' => '0.01', 'cache_write_input_tokens_5m' => '0.125', 'cache_write_input_tokens_1h' => '0.20'], '0.0017'],
     ['anthropic:claude-haiku-5-5-global-long', 'https://platform.claude.com/docs/en/about-claude/pricing', ['input_tokens' => '0.50', 'output_tokens' => '2.50', 'cached_input_tokens' => '0.05', 'cache_write_input_tokens_5m' => '0.625', 'cache_write_input_tokens_1h' => '1'], '0.0085'],
-    ['openai:gpt-6-luna-standard-short', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '0.10', 'output_tokens' => '0.50', 'cached_input_tokens' => '0.01', 'cache_write_input_tokens' => '0.125'], '0.0017'],
-    ['openai:gpt-6-luna-standard-long', 'https://developers.openai.com/api/docs/pricing', ['input_tokens' => '0.20', 'output_tokens' => '0.75', 'cached_input_tokens' => '0.02', 'cache_write_input_tokens' => '0.25'], '0.00265'],
     ['openai:decisions-gpt-6-luna-short', 'https://developers.openai.com/api/docs/guides/decisions', ['input_tokens' => '0.10', 'output_tokens' => '0', 'cached_input_tokens' => '0', 'cache_write_input_tokens' => '0'], '0.0002'],
     ['openai:decisions-gpt-6-luna-long', 'https://developers.openai.com/api/docs/guides/decisions', ['input_tokens' => '0.20', 'output_tokens' => '0', 'cached_input_tokens' => '0', 'cache_write_input_tokens' => '0'], '0.0004'],
     ['zai:glm-5.3', 'https://docs.z.ai/guides/overview/pricing', ['input_tokens' => '1.4', 'cached_input_tokens' => '0.26', 'output_tokens' => '4.4'], '0.016'],

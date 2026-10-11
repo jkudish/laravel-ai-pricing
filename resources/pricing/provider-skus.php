@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 15,
-    'retrieved_at' => '2026-10-11T09:00:00+00:00',
+    'version' => 16,
+    'retrieved_at' => '2026-10-11T09:45:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -562,22 +562,24 @@ return [
         ],
         'openai:gpt-6-luna-standard-short' => [
             'source' => 'https://developers.openai.com/api/docs/pricing',
-            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6-luna generation, standard service tier, at most 272,000 input tokens; not an alias. Not Decisions. Excludes regional/FedRAMP 10% uplift, batch, flex, fast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'notes' => 'Checked 2026-10-11. Direct OpenAI billing basis for gpt-6-luna generation, standard service tier, at most 272,000 input tokens; not an alias. Not Decisions. Excludes regional/FedRAMP 10% uplift, batch, flex, fast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models (https://developers.openai.com/api/docs/pricing, accessed 2026-10-11; gpt-6-luna lists web_search as a supported Responses tool at https://developers.openai.com/api/docs/models/gpt-6-luna); search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
             'rates' => [
                 'input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '0.50', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.01', 'per' => '1000000'],
                 'cache_write_input_tokens' => ['amount' => '0.125', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'openai:gpt-6-luna-standard-long' => [
             'source' => 'https://developers.openai.com/api/docs/pricing',
-            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6-luna generation, standard service tier, more than 272,000 input tokens; not an alias. Not Decisions. Excludes regional/FedRAMP 10% uplift, batch, flex, fast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'notes' => 'Checked 2026-10-11. Direct OpenAI billing basis for gpt-6-luna generation, standard service tier, more than 272,000 input tokens; the long-context rates apply to the full request; not an alias. Not Decisions. Excludes regional/FedRAMP 10% uplift, batch, flex, fast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models (https://developers.openai.com/api/docs/pricing, accessed 2026-10-11; gpt-6-luna lists web_search as a supported Responses tool at https://developers.openai.com/api/docs/models/gpt-6-luna); search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
             'rates' => [
                 'input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '0.75', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.02', 'per' => '1000000'],
                 'cache_write_input_tokens' => ['amount' => '0.25', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'openai:decisions-gpt-6-luna-short' => [
