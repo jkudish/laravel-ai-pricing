@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - Unreleased
+
+A minor release: the date is set when the release is prepared and tagged.
+
+### Added
+
+- Dated rate windows. A `PriceDefinition` can carry an ordered list of `RateWindow`s instead of one set of rates. Each window applies from `effective_from` (inclusive) until `effective_until` (exclusive), in UTC unless the vendor states a timezone. The constructor rejects windows that overlap, leave a gap, are open inside the range, or price different units, and it rejects a definition that has both rates and windows.
+  - An actual cost uses the window in effect at the observation's new optional `pricedAt` time, or now when it is not set. `AiPricing::cost($response, at: ...)` passes it for a completed response.
+  - A pre-run maximum-cost estimate sets the observation's new optional `pricedUntil` to the run's deadline. Each rate is then the highest rate of every window overlapping `[pricedAt ?? now, pricedUntil)`, compared unit by unit. `AiPricing::quote(..., at: ..., until: ...)` exposes both.
+  - A time or interval that no window fully covers quotes unavailable instead of guessing.
+  - Quote provenance lists the windows that priced it under `rate_windows`.
+  - The package snapshot accepts `rate_windows` entries in place of `rates`, and snapshot fingerprints sort each window's rates the way they already sort `rates`, so they survive jsonb storage.
+- Windowed Gemini Developer API bases `gemini:gemini-3.8-flash-standard` and `gemini:gemini-3.6-flash-standard` (pricing snapshot v13, retrieved 2026-10-11). Per 1M tokens: USD 0.75 input, 3.75 output and 0.075 cached input through 2026-12-31, then 1.50, 7.50 and 0.15 from 2027-01-01T00:00Z. Google Search grounding stays USD 14 per 1,000 queries. Rates were checked against <https://ai.google.dev/gemini-api/docs/pricing> on 2026-10-11. Google states no timezone for the change. The dated `-standard-2026` and `-standard-2027` bases remain.
+
+### Changed
+
+- Prices and snapshot entries without windows resolve exactly as before, with unchanged quotes, provenance and fingerprints. `PricingObservation`, `PriceDefinition`, `PricingProvenance`, `CostCalculator::calculate()` and `AiPricing::cost()`/`quote()` gain only optional trailing parameters. A minor release is still required: callers that read `PriceDefinition::$rates` directly see an empty map for a windowed definition and must resolve its window, and consumers that rebuild a persisted definition must rebuild its `rate_windows`.
+
 ## [0.2.3] - 2026-10-10
 
 ### Added
@@ -142,6 +160,7 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
 [Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.3...main
+[0.3.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.0...v0.2.1

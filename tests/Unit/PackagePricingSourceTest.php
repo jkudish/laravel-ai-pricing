@@ -33,7 +33,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-10')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-11')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -240,13 +240,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-10T01:47:24+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T04:56:30+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-10T01:47:24+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T04:56:30+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -266,8 +266,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(12)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-10T01:47:24+00:00')
+    expect($snapshot['version'])->toBe(13)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-11T04:56:30+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -286,7 +286,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10))\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10|11))\./');
     }
 });
 
@@ -317,7 +317,7 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-10T01:47:24+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T04:56:30+00:00')
         ->and($definition->effectiveAt)->toBeNull()
         ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain('Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
@@ -849,6 +849,57 @@ it('prices each native Gemini basis with 0.1x cache reads and per-query search o
     ['gemini:gemini-2.5-flash-standard', '0.30', '2.50', false],
     ['gemini:gemini-2.5-flash-lite-standard', '0.10', '0.40', false],
 ]);
+
+it('prices 3.8 and 3.6 Flash from dated windows that double every token rate at 2027-01-01T00:00Z', function (string $model): void {
+    $key = "gemini:{$model}-standard";
+    $definition = packagePricingSource()->find(new ModelIdentity('gemini', "{$model}-standard"));
+    expect($definition)->not->toBeNull();
+    assert($definition !== null);
+    $entry = packagePricingSnapshot()['prices'][$key];
+    $expected = [
+        [null, '2027-01-01T00:00:00+00:00', ['input_tokens' => '0.75', 'output_tokens' => '3.75', 'cached_input_tokens' => '0.075', 'web_searches' => '0.014']],
+        ['2027-01-01T00:00:00+00:00', null, ['input_tokens' => '1.50', 'output_tokens' => '7.50', 'cached_input_tokens' => '0.15', 'web_searches' => '0.014']],
+    ];
+
+    expect($definition->rates)->toBe([])
+        ->and($definition->rateWindows)->toHaveCount(2)
+        ->and($entry['notes'] ?? '')->toStartWith('Checked 2026-10-11.');
+
+    foreach ($expected as $index => [$from, $until, $amounts]) {
+        $window = $definition->rateWindows[$index];
+
+        expect($window->bounds())->toBe(['effective_from' => $from, 'effective_until' => $until])
+            ->and(array_keys($window->rates))->toBe(array_keys($amounts));
+
+        foreach ($amounts as $unit => $amount) {
+            expect($entry['rate_windows'][$index]['rates'][$unit]['amount'])->toBe($amount)
+                ->and($entry['rate_windows'][$index]['rates'][$unit]['per'])->toBeString()
+                ->and($window->rates[$unit]->currency)->toBe('USD');
+        }
+    }
+
+    // The windowed basis agrees with the dated bases it replaces.
+    $usage = new Usage(['input_tokens' => 2_000_000, 'output_tokens' => 300_000, 'cached_input_tokens' => 50_000, 'web_searches' => 2]);
+    $dated = static fn (string $year): string => (string) AiPricing::quote('gemini', "{$model}-standard-{$year}", $usage)->amount;
+    $lastSecond = AiPricing::quote('gemini', "{$model}-standard", $usage, at: new DateTimeImmutable('2026-12-31T23:59:59Z'));
+    $firstInstant = AiPricing::quote('gemini', "{$model}-standard", $usage, at: new DateTimeImmutable('2027-01-01T00:00:00Z'));
+    $runAcrossNewYear = AiPricing::quote(
+        'gemini',
+        "{$model}-standard",
+        $usage,
+        at: new DateTimeImmutable('2026-12-31T23:00:00Z'),
+        until: new DateTimeImmutable('2027-01-01T01:00:00Z'),
+    );
+
+    expect((string) $lastSecond->amount)->toBe('2.65675')
+        ->and($dated('2026'))->toBe('2.65675')
+        ->and((string) $firstInstant->amount)->toBe('5.2855')
+        ->and($dated('2027'))->toBe('5.2855')
+        ->and((string) $runAcrossNewYear->amount)->toBe('5.2855')
+        ->and($runAcrossNewYear->completeness)->toBe(CostCompleteness::Complete)
+        ->and($runAcrossNewYear->provenance?->toArray()['rate_windows'] ?? null)->toHaveCount(2)
+        ->and($lastSecond->provenance?->toArray()['rate_windows'] ?? null)->toBe([['effective_from' => null, 'effective_until' => '2027-01-01T00:00:00+00:00']]);
+})->with(['gemini-3.8-flash', 'gemini-3.6-flash']);
 
 it('prices each OpenRouter Gemini bound basis from the direct rate and its routing uplift', function (string $basis, string $native, string $uplift): void {
     expectBasisPrices($basis, [...scaledTokenPrices($native, $uplift), 'web_searches' => '0.014']);

@@ -139,7 +139,7 @@ final readonly class PricingSnapshot
      * PostgreSQL jsonb persistence normalizes object key order, so a
      * definition rebuilt from storage can only reproduce its fingerprint
      * when the only ordering that varies through that round trip is
-     * normalized here: the rates map. Every other key order is re-emitted
+     * normalized here: the rates maps. Every other key order is re-emitted
      * deterministically by the value objects, so canonicalizing more than
      * the rates map would change fingerprints of already-persisted
      * snapshots that were computed over the legacy encoding.
@@ -157,6 +157,23 @@ final readonly class PricingSnapshot
         $rates = $value['rates'] ?? null;
         if (is_array($rates)) {
             $value['rates'] = self::sortKeysJsonbOrder($rates);
+        }
+
+        // Each dated window's rates map round-trips through jsonb the same
+        // way. The windows list itself keeps its order, and only windowed
+        // definitions carry it, so unwindowed fingerprints are unchanged.
+        $windows = $value['rate_windows'] ?? null;
+        if (is_array($windows)) {
+            $value['rate_windows'] = array_map(
+                static function (mixed $window): mixed {
+                    if (is_array($window) && is_array($window['rates'] ?? null)) {
+                        $window['rates'] = self::sortKeysJsonbOrder($window['rates']);
+                    }
+
+                    return $window;
+                },
+                $windows,
+            );
         }
 
         return $value;

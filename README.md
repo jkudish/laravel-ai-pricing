@@ -218,7 +218,8 @@ Some model prices depend on facts the model name does not carry: inference geogr
 | `anthropic` | `claude-fable-5-1-global`, `claude-mythos-5-1-global`, `claude-fable-5-global`, `claude-mythos-5-global`, `claude-opus-4-7-global`, `claude-opus-4-6-global`, `claude-sonnet-5-global`, `claude-sonnet-4-6-global` | Global geography, synchronous Messages API | Same as Opus 5.5, plus `web_searches` |
 | `anthropic` | `claude-opus-5-global-standard`, `claude-opus-4-8-global-standard` | Global geography, standard speed, synchronous Messages API | Same as Opus 5.5, plus `web_searches` |
 | `anthropic` | `claude-opus-4-5-20251101`, `claude-haiku-4-5-20251001` (aliases `claude-opus-4-5`, `claude-haiku-4-5`) | Synchronous Messages API; these models have one Claude API price | Same as Opus 5.5, plus `web_searches` |
-| `gemini` | `gemini-3.8-flash-standard-2026`/`-2027`, `gemini-3.6-flash-standard-2026`/`-2027` | Gemini Developer API, paid standard tier; `-2026` for requests before 2027-01-01T00:00Z, `-2027` from then | `input_tokens`, `output_tokens`, `cached_input_tokens`, `web_searches` (Google Search grounding queries) |
+| `gemini` | `gemini-3.8-flash-standard`, `gemini-3.6-flash-standard` | Gemini Developer API, paid standard tier; dated rate windows switch from the introductory rates (0.75/M input, 3.75/M output) to the doubled rates (1.50/M, 7.50/M) at 2027-01-01T00:00Z | `input_tokens`, `output_tokens`, `cached_input_tokens`, `web_searches` (Google Search grounding queries) |
+| `gemini` | `gemini-3.8-flash-standard-2026`/`-2027`, `gemini-3.6-flash-standard-2026`/`-2027` | The same prices as single-rate bases; `-2026` for requests before 2027-01-01T00:00Z, `-2027` from then | Same as above |
 | `gemini` | `gemini-3.5-flash-lite-standard`, `gemini-3.1-flash-lite-standard`, `gemini-3-flash-preview-standard` | Paid standard tier; Flash-Lite 3.1 and 3 Flash Preview exclude audio input | Same as Gemini 3.8 Flash |
 | `gemini` | `gemini-3.1-pro-preview-standard-short`/`-long`, `gemini-3.1-pro-preview-customtools-standard-short`/`-long` | Paid standard tier; prompts up to 200,000 tokens (`-short`) or above (`-long`), counting cached tokens | Same as Gemini 3.8 Flash |
 | `gemini` | `gemini-2.5-pro-standard-short`/`-long`, `gemini-2.5-flash-standard`, `gemini-2.5-flash-lite-standard` | Paid standard tier, no grounding; same 200,000-token threshold for Pro; Flash and Flash-Lite exclude audio input | `input_tokens`, `output_tokens`, `cached_input_tokens` |
@@ -367,6 +368,51 @@ if ($quote->amount !== null && $quote->amount->isLessThan('0.01')) {
 ```
 
 A quote uses the same pricing sources and calculation rules as `cost()`, but it has no completed response and no provider-reported amount. Use a cost result for accounting after a request finishes. Use a quote to decide whether to send a request.
+
+### Prices that change on a known date
+
+Some prices change on an announced date. Gemini 3.8 and 3.6 Flash, for example, cost USD 0.75 per million input tokens and 3.75 per million output tokens through 2026-12-31, and 1.50 and 7.50 from 2027-01-01. A price definition can carry an ordered list of dated rate windows instead of one set of rates. Each window applies from `effective_from` (inclusive) until `effective_until` (exclusive), in UTC unless the vendor states a timezone. The windows must be contiguous and must not overlap; only the first may be open at its start and only the last at its end. Every window prices the same units.
+
+- An actual cost uses the window in effect when the request ran. Pass that time as `at` when you cost a response later; without it, the package uses the current time.
+- A pre-run estimate bounds a run that can bill until its deadline. Pass the deadline as `until`, and each rate is the highest rate of every window that overlaps the interval from `at` (default now) to `until`. Rates are compared unit by unit, so an estimate can combine the input rate of one window with the output rate of another.
+- A time or interval that no window fully covers quotes unavailable rather than guessing.
+- A price without windows resolves exactly as before. `at` and `until` have no effect on it.
+
+```php
+use Jkudish\LaravelAiPricing\Facades\AiPricing;
+use Jkudish\LaravelAiPricing\ValueObjects\PricingObservation;
+
+// The most this run can cost if it is still billing at its deadline.
+$estimate = AiPricing::quote('gemini', 'gemini-3.8-flash-standard', $usage, until: $deadline);
+
+// A completed request, costed later at the rate in effect when it ran.
+$cost = AiPricing::cost($response, at: $requestStartedAt);
+
+// The same fields on a resolver observation.
+$quote = $resolver->resolve(new PricingObservation($identity, $usage, pricedAt: $startedAt, pricedUntil: $deadline));
+```
+
+A quote's provenance lists the windows that priced it under `rate_windows`: the one in effect for an actual cost, or every overlapping window for an estimate. In the package snapshot, a windowed entry replaces `rates` with `rate_windows`:
+
+```php
+'gemini:gemini-3.8-flash-standard' => [
+    'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+    'rate_windows' => [
+        ['effective_from' => null, 'effective_until' => '2027-01-01T00:00:00+00:00', 'rates' => [
+            'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+            'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+            // ...
+        ]],
+        ['effective_from' => '2027-01-01T00:00:00+00:00', 'effective_until' => null, 'rates' => [
+            'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+            'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+            // ...
+        ]],
+    ],
+],
+```
+
+Construct windowed definitions in code with `new PriceDefinition($identity, [], $source, rateWindows: [new RateWindow($from, $until, $rates), ...])`. Configured prices do not support windows yet.
 
 ## Streaming responses
 

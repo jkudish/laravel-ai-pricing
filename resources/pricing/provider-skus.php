@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 12,
-    'retrieved_at' => '2026-10-10T01:47:24+00:00',
+    'version' => 13,
+    'retrieved_at' => '2026-10-11T04:56:30+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -96,7 +96,8 @@ return [
         // service_tier (standard, flex, priority) is a request field on the same model ID,
         // the Pro models are prompt-length tiered, and 3.8/3.6 Flash double their rates
         // on 2027-01-01T00:00Z, so generic native IDs cannot select a rate. Use the
-        // -standard[-short|-long|-2026|-2027] bases. gemini-3.7-flash and gemini-3.5-flash
+        // -standard[-short|-long] bases; 3.8 and 3.6 Flash -standard carry dated rate
+        // windows (the -2026/-2027 bases remain). gemini-3.7-flash and gemini-3.5-flash
         // are retired IDs that Google routes to gemini-3.8-flash and gemini-3.6-flash; the
         // -latest IDs are moving aliases whose current targets Google does not document.
         'gemini:gemini-3.8-flash',
@@ -1308,6 +1309,58 @@ return [
                 'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
                 'web_searches' => ['amount' => '0.014', 'per' => '1'],
+            ],
+        ],
+        'gemini:gemini-3.8-flash-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-11. Date-windowed billing basis for gemini-3.8-flash on the Gemini Developer API (generateContent or Interactions), paid tier, standard service tier (service_tier omitted or standard); not a provider alias. Google publishes introductory rates valid through December 31, 2026 and doubles every token rate from January 1, 2027. Google states no timezone, so the package changes windows at 2027-01-01T00:00Z. An actual cost uses the window in effect when the request ran; a maximum-cost estimate uses the higher rate whenever its interval reaches 2027. This basis replaces choosing between gemini-3.8-flash-standard-2026 and gemini-3.8-flash-standard-2027, which stay available. One input rate covers text, image, video and audio; documents bill at the image rate. No long-context tier. Output includes thinking tokens; no separate reasoning rate. cached_input_tokens covers implicit and explicit cache hits (input partitions are exclusive). Google publishes no per-token cache-write fee, so cache_write_input_tokens stays unpriced. Explicit-cache storage (USD 0.50 per million token-hours through 2026-12-31, 1.00 from 2027-01-01) is excluded and unpriced. web_searches counts individual Google Search grounding queries the model executes (USD 14 per 1,000 in both windows); the monthly free allowance of 5,000 is not subtracted. Google Maps grounding is excluded. Excludes batch, flex, priority, Live API and Vertex AI pricing. Re-review before 2027-01-01 in case Google changes the announced rates.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.075', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+            ],
+        ],
+        'gemini:gemini-3.6-flash-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-11. Date-windowed billing basis for gemini-3.6-flash on the Gemini Developer API (generateContent or Interactions), paid tier, standard service tier (service_tier omitted or standard); not a provider alias. Requests to the retired gemini-3.5-flash ID are routed to gemini-3.6-flash per https://ai.google.dev/gemini-api/docs/deprecations, but that ID is fallback-blocked, not aliased. Google publishes introductory rates valid through December 31, 2026 and doubles every token rate from January 1, 2027. Google states no timezone, so the package changes windows at 2027-01-01T00:00Z. An actual cost uses the window in effect when the request ran; a maximum-cost estimate uses the higher rate whenever its interval reaches 2027. This basis replaces choosing between gemini-3.6-flash-standard-2026 and gemini-3.6-flash-standard-2027, which stay available. One input rate covers text, image, video and audio; documents bill at the image rate. No long-context tier. Output includes thinking tokens; no separate reasoning rate. cached_input_tokens covers implicit and explicit cache hits (input partitions are exclusive). Google publishes no per-token cache-write fee, so cache_write_input_tokens stays unpriced. Explicit-cache storage (USD 0.50 per million token-hours through 2026-12-31, 1.00 from 2027-01-01) is excluded and unpriced. web_searches counts individual Google Search grounding queries the model executes (USD 14 per 1,000 in both windows); the monthly free allowance of 5,000 is not subtracted. Google Maps grounding is excluded. Excludes batch, flex, priority, Live API and Vertex AI pricing. Re-review before 2027-01-01 in case Google changes the announced rates.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.075', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
             ],
         ],
         'gemini:gemini-3.5-flash-lite-standard' => [

@@ -48,6 +48,37 @@ final readonly class Rate
         return new Money($normalized === '' ? '0' : $normalized, $this->currency);
     }
 
+    /** Whether this rate charges more per unit than another rate for the same unit. */
+    public function exceeds(self $other): bool
+    {
+        return $this->amount->multipliedBy($other->per)
+            ->isGreaterThan($other->amount->multipliedBy($this->per));
+    }
+
+    /**
+     * Validate a rates map keyed by usage unit and return its single currency.
+     *
+     * @param  non-empty-array<string, self>  $rates
+     */
+    public static function currencyOf(array $rates): string
+    {
+        $currency = null;
+
+        foreach ($rates as $unit => $rate) {
+            if ($rate->unit !== $unit) {
+                throw new InvalidArgumentException('Rates must be keyed by their usage unit.');
+            }
+
+            if ($currency !== null && $currency !== $rate->currency) {
+                throw new InvalidArgumentException('A price definition cannot contain mixed currencies.');
+            }
+
+            $currency = $rate->currency;
+        }
+
+        return $currency;
+    }
+
     /** @return array{unit: string, amount: string, per: string, currency: string} */
     public function toArray(): array
     {
