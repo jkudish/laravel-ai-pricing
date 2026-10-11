@@ -11,6 +11,7 @@ use Jkudish\LaravelAiPricing\Enums\PricingSource;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Jkudish\LaravelAiPricing\ValueObjects\Rate;
+use Jkudish\LaravelAiPricing\ValueObjects\RateWindow;
 use Override;
 
 final readonly class PackagePricingSource implements FallbackPolicy, PricingCatalog
@@ -26,9 +27,17 @@ final readonly class PackagePricingSource implements FallbackPolicy, PricingCata
      *     prices: array<string, array{
      *         source: string,
      *         notes?: string,
-     *         rates: array<string, array{amount: string|int, per: string|int}>
+     *         rates?: array<string, array{amount: string|int, per: string|int}>,
+     *         rate_windows?: list<array{
+     *             effective_from?: string|null,
+     *             effective_until?: string|null,
+     *             rates: array<string, array{amount: string|int, per: string|int}>
+     *         }>
      *     }>
      * } $snapshot
+     *
+     * An entry carries either `rates` or `rate_windows`: an ordered list of
+     * half-open, contiguous windows whose bounds are ISO 8601 instants.
      */
     public function __construct(private array $snapshot) {}
 
@@ -50,24 +59,18 @@ final readonly class PackagePricingSource implements FallbackPolicy, PricingCata
             return null;
         }
 
-        $rates = [];
-
-        foreach ($price['rates'] as $unit => $rate) {
-            $rates[$unit] = new Rate(
-                unit: $unit,
-                amount: $rate['amount'],
-                per: $rate['per'],
-                currency: $this->snapshot['currency'],
-            );
-        }
-
         return new PriceDefinition(
             identity: $identity,
-            rates: $rates,
+            rates: $this->rates($price['rates'] ?? []),
             source: PricingSource::ProviderNative,
             effectiveAt: $this->date($this->snapshot['effective_at']),
             retrievedAt: $this->date($this->snapshot['retrieved_at']),
             sourceReference: $price['source'],
+            rateWindows: array_map(fn (array $window): RateWindow => new RateWindow(
+                effectiveFrom: $this->date($window['effective_from'] ?? null),
+                effectiveUntil: $this->date($window['effective_until'] ?? null),
+                rates: $this->rates($window['rates']),
+            ), $price['rate_windows'] ?? []),
         );
     }
 
@@ -81,6 +84,26 @@ final readonly class PackagePricingSource implements FallbackPolicy, PricingCata
     public function allowsFallback(ModelIdentity $identity): bool
     {
         return ! in_array($identity->key(), $this->snapshot['fallback_blocked'] ?? [], true);
+    }
+
+    /**
+     * @param  array<string, array{amount: string|int, per: string|int}>  $rates
+     * @return array<string, Rate>
+     */
+    private function rates(array $rates): array
+    {
+        $built = [];
+
+        foreach ($rates as $unit => $rate) {
+            $built[$unit] = new Rate(
+                unit: $unit,
+                amount: $rate['amount'],
+                per: $rate['per'],
+                currency: $this->snapshot['currency'],
+            );
+        }
+
+        return $built;
     }
 
     private function date(?string $date): ?DateTimeImmutable

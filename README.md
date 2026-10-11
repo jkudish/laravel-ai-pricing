@@ -125,10 +125,10 @@ The snapshot-level `retrieved_at` records when the package snapshot was assemble
 | `perplexity` | `agent-low`, `agent-medium`, `agent-high` | `web_searches`, `fetch_url_requests`, `people_searches`, `finance_searches`, `sandbox_sessions`, `sandbox_searches` |
 | `perplexity` | `search` | `requests` |
 | `parallel` | `turbo` | `requests`, `additional_results` |
-| `parallel` | `research-pro` | `processor_requests` |
-| `valyu` | `research-standard` | `research_requests`, `screenshot_urls`, `code_executions`, `additional_deliverables` |
+| `parallel` | `research-lite`, `research-base`, `research-core`, `research-core2x`, `research-pro`, `research-ultra`, `research-ultra2x`, `research-ultra4x`, `research-ultra8x` | `processor_requests` |
+| `valyu` | `research-fast`, `research-standard`, `research-heavy`, `research-max` | `research_requests`, `screenshot_urls`, `code_executions`, `additional_deliverables` |
 | `typesafe` | `jev-1.13.0` (aliases `jev-latest`, `jev-preview`) | `input_tokens`, `output_tokens` (free) |
-| `xai` | `grok-4.6` | `searches`, `x_search_posts`, `x_search_profiles` |
+| `xai` | `grok-4.7`, `grok-4.6` | `searches`, `x_search_posts`, `x_search_profiles` |
 
 The Exa request rate includes up to ten results; pass only results above ten as `additional_results`. Pass `uncached_queries: 0` for a free cached Kagi response. You.com Frontier Research has negotiated usage and is intentionally unavailable.
 
@@ -146,12 +146,12 @@ The PHP v2 parity profiles use these pricing identities and dispositions:
 | `serpbase/news` | `serpbase:news` | Configured-only: use the account's actual price per credit, not a public headline minimum. |
 | `exa/research` | `exa:research` | Built-in Auto-effort ACU and search rates; fixed efforts and enrichment require their applicable rates. |
 | `gemini-deep/research` | `gemini:deep-research` | Unavailable: model, intermediate token, and tool quantities are provider-controlled. |
-| `grok-x-only/x`, `grok-combined/combined` | `xai:grok-4.6` | Built-in current Web Search and per-item X Search rates only; context-tiered model tokens remain partial or unavailable. |
+| `grok`, `grok-x-only/x`, `grok-combined/combined` | `xai:grok-4.7` (or `xai:grok-4.6` for the previous model) | Built-in current Web Search and per-item X Search rates only; context-tiered model tokens remain partial or unavailable. |
 | `parallel/search` | `parallel:search` | Configured-only: the selectable mode and additional-result count determine the price. |
 | `parallel/turbo` | `parallel:turbo` | Built-in fixed Turbo request and additional-result rates. |
-| `parallel/research` (pro) | `parallel:research-pro` | Built-in fixed rate per successful pro processor run; other processors need distinct configured identities. |
+| `parallel/research` | `parallel:research-{processor}` | Built-in fixed rate per successful run for every listed processor, `lite` through `ultra8x`. |
 | `valyu/search` | `valyu:search` | Unavailable: every result can use a differently priced source class. |
-| `valyu/research` (standard) | `valyu:research-standard` | Built-in Standard base and optional-tool rates; provider-reported response cost is preferred. |
+| `valyu/research` | `valyu:research-{mode}` | Built-in Fast, Standard, Heavy and Max base and optional-tool rates; provider-reported response cost is preferred. |
 | `firecrawl-search/search` | `firecrawl:search` | Configured-only: the API uses fixed credits, but USD per credit depends on the account plan. |
 
 Configured-only and unavailable identities are recorded as fallback-blocked policy, not zero-value price entries. This prevents a coincidentally named Portkey model from supplying an incompatible price, while still allowing provider-reported actual cost or an explicitly configured application rate. Configure the exact identity and account rate when you can prove its applicability.
@@ -162,7 +162,7 @@ These prices are estimates, not invoices. Provider-reported actual cost still wi
 
 Perplexity Agent presets route across models and tools, so the preset SKUs contain only stable tool rates. A quote with tool usage and unpriced routed-model units is partial; model-only usage is unavailable. Prefer the completed response's provider-reported `usage.cost.total_cost` whenever present. The package does not treat representative preset runs as fixed prices or maximums.
 
-Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entry intentionally omits model-token rates because Grok 4.6 bills a higher tier once a prompt reaches 200,000 tokens (≥ 200k) and US regional requests bill at 1.1x. Its search-tool rates were re-reviewed against [docs.x.ai/developers/pricing](https://docs.x.ai/developers/pricing) on 2026-09-26: Web Search bills USD 5 per 1,000 calls (`searches`), while X Search has billed per item fetched since the 2026-09-21 change — USD 5 per 1,000 posts returned by a search or thread fetch, including parent and quoted posts (`x_search_posts`), and USD 10 per 1,000 profiles returned by a user search (`x_search_profiles`). Map the reported `usage.server_side_tool_usage_details` fields onto these units: `web_search_calls` to `searches`, `x_posts_fetched` to `x_search_posts`, and `x_users_fetched` to `x_search_profiles`. Never map the `x_search_calls` count onto the per-item units: it counts tool calls, not fetched items, and xAI no longer bills X Search per call. `searches` is preserved as the Web Search call unit, and its meaning has narrowed accordingly: callers that previously passed X Search calls as `searches` must migrate to `x_search_posts` and `x_search_profiles`, or their quotes no longer match xAI's per-item billing. Because the reviewed snapshot precedes the Portkey fallback, this partial xAI entry deliberately prevents incompatible flat fallback token rates from being applied to `grok-4.6`; token-only usage is unavailable, and search plus token usage is partial.
+Parallel Turbo includes ten results; pass only results above ten as `additional_results`. Exa Research's built-in rates apply to Auto effort (`agent_compute_units` plus `searches`). Valyu Standard Research must include optional tool units when used. The xAI entries intentionally omit model-token rates because Grok 4.7 and Grok 4.6 bill a higher tier once a prompt reaches 200,000 tokens (≥ 200k) and US regional requests bill at 1.1x. Their search-tool rates were reviewed against [docs.x.ai/developers/pricing](https://docs.x.ai/developers/pricing) on 2026-09-26 (Grok 4.6) and 2026-10-11 (Grok 4.7): Web Search bills USD 5 per 1,000 calls (`searches`), while X Search has billed per item fetched since the 2026-09-21 change — USD 5 per 1,000 posts returned by a search or thread fetch, including parent and quoted posts (`x_search_posts`), and USD 10 per 1,000 profiles returned by a user search (`x_search_profiles`). Map the reported `usage.server_side_tool_usage_details` fields onto these units: `web_search_calls` to `searches`, `x_posts_fetched` to `x_search_posts`, and `x_users_fetched` to `x_search_profiles`. Never map the `x_search_calls` count onto the per-item units: it counts tool calls, not fetched items, and xAI no longer bills X Search per call. `searches` is preserved as the Web Search call unit, and its meaning has narrowed accordingly: callers that previously passed X Search calls as `searches` must migrate to `x_search_posts` and `x_search_profiles`, or their quotes no longer match xAI's per-item billing. Because the reviewed snapshot precedes the Portkey fallback, these partial xAI entries deliberately prevent incompatible flat fallback token rates from being applied to `grok-4.7` or `grok-4.6`; token-only usage is unavailable, and search plus token usage is partial.
 
 TypeSafe Jev prices laravel/ai `ClassificationResponse` objects directly: `AiPricing::cost($response)` reads the `typesafe` provider, the versioned model the API reported (for example `jev-1.13.0`), and the input and output token counts. The reviewed rate is USD 0.042 per million input tokens from [docs.typesafe.ai/models](https://docs.typesafe.ai/models) (checked 2026-09-28). TypeSafe documents output tokens as free, so the entry publishes an explicit zero `output_tokens` rate and the reported output count keeps a quote complete instead of partial. The snapshot's source-local `aliases` map lets `quote('typesafe', 'jev-latest', ...)` use the rate of the version the alias currently points to while keeping `jev-latest` as the quoted identity. Aliases move when TypeSafe ships a new release; any versioned model the snapshot has not reviewed, such as a future `jev-1.14.0`, stays unavailable until its rate is added.
 
@@ -206,10 +206,10 @@ Some model prices depend on facts the model name does not carry: inference geogr
 | Provider | Billing basis | Applies only when | Usage units |
 | --- | --- | --- | --- |
 | `anthropic` | `claude-opus-5-5-global-standard` | Global geography, standard speed, synchronous Messages API | `input_tokens`, `output_tokens`, `cached_input_tokens`, `cache_write_input_tokens_5m`, `cache_write_input_tokens_1h` |
-| `anthropic` | `claude-sonnet-5-5-global-standard` | Global geography, synchronous Messages API | Same as Opus 5.5 |
+| `anthropic` | `claude-sonnet-5-5-global-standard` | Global geography, synchronous Messages API | Same as Opus 5.5, plus `web_searches` (USD 10 per 1,000 searches) |
 | `anthropic` | `claude-haiku-5-5-global-short`, `claude-haiku-5-5-global-long` | Global geography, synchronous Messages API; prompts up to 100,000 tokens (`-short`) or above (`-long`), counting cache reads and writes | Same as Opus 5.5 |
-| `openai` | `gpt-6.1-sol-standard-short`, `gpt-6.1-sol-standard-long` | Direct API, standard service tier; up to 272,000 input tokens (`-short`) or above (`-long`) | `input_tokens`, `output_tokens`, `cached_input_tokens`, `cache_write_input_tokens` |
-| `openai` | `gpt-6-luna-standard-short`, `gpt-6-luna-standard-long` | Direct generation API, standard service tier; same 272,000-token threshold | Same as GPT-6.1 Sol |
+| `openai` | `gpt-6.1-sol-standard-short`, `gpt-6.1-sol-standard-long` | Direct API, standard service tier; up to 272,000 input tokens (`-short`) or above (`-long`) | `input_tokens`, `output_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `web_searches` (USD 10 per 1,000 search calls; pass the count, because OpenAI usage does not report it) |
+| `openai` | `gpt-6-luna-standard-short`, `gpt-6-luna-standard-long` | Direct generation API, standard service tier; same 272,000-token threshold | `input_tokens`, `output_tokens`, `cached_input_tokens`, `cache_write_input_tokens` |
 | `openai` | `decisions-gpt-6-luna-short`, `decisions-gpt-6-luna-long` | `POST /v1/decisions` (public beta) with GPT-6 Luna; same 272,000-token threshold | `input_tokens`; output and cache units are published as explicit zero rates |
 | `zai` | `glm-5.3`, `glm-5.3-flash` | Direct Z.AI pay-as-you-go API, not the Coding Plan or OpenRouter | `input_tokens`, `cached_input_tokens`, `output_tokens` |
 | `deepseek` | `deepseek-v4-pro-peak` | Direct API, priced at the peak rate as a conservative reservation; off-peak is half price | `input_tokens`, `cached_input_tokens`, `output_tokens` |
@@ -218,7 +218,8 @@ Some model prices depend on facts the model name does not carry: inference geogr
 | `anthropic` | `claude-fable-5-1-global`, `claude-mythos-5-1-global`, `claude-fable-5-global`, `claude-mythos-5-global`, `claude-opus-4-7-global`, `claude-opus-4-6-global`, `claude-sonnet-5-global`, `claude-sonnet-4-6-global` | Global geography, synchronous Messages API | Same as Opus 5.5, plus `web_searches` |
 | `anthropic` | `claude-opus-5-global-standard`, `claude-opus-4-8-global-standard` | Global geography, standard speed, synchronous Messages API | Same as Opus 5.5, plus `web_searches` |
 | `anthropic` | `claude-opus-4-5-20251101`, `claude-haiku-4-5-20251001` (aliases `claude-opus-4-5`, `claude-haiku-4-5`) | Synchronous Messages API; these models have one Claude API price | Same as Opus 5.5, plus `web_searches` |
-| `gemini` | `gemini-3.8-flash-standard-2026`/`-2027`, `gemini-3.6-flash-standard-2026`/`-2027` | Gemini Developer API, paid standard tier; `-2026` for requests before 2027-01-01T00:00Z, `-2027` from then | `input_tokens`, `output_tokens`, `cached_input_tokens`, `web_searches` (Google Search grounding queries) |
+| `gemini` | `gemini-3.8-flash-standard`, `gemini-3.6-flash-standard` | Gemini Developer API, paid standard tier; dated rate windows switch from the introductory rates (0.75/M input, 3.75/M output) to the doubled rates (1.50/M, 7.50/M) at 2027-01-01T00:00Z | `input_tokens`, `output_tokens`, `cached_input_tokens`, `web_searches` (Google Search grounding queries) |
+| `gemini` | `gemini-3.8-flash-standard-2026`/`-2027`, `gemini-3.6-flash-standard-2026`/`-2027` | The same prices as single-rate bases; `-2026` for requests before 2027-01-01T00:00Z, `-2027` from then | Same as above |
 | `gemini` | `gemini-3.5-flash-lite-standard`, `gemini-3.1-flash-lite-standard`, `gemini-3-flash-preview-standard` | Paid standard tier; Flash-Lite 3.1 and 3 Flash Preview exclude audio input | Same as Gemini 3.8 Flash |
 | `gemini` | `gemini-3.1-pro-preview-standard-short`/`-long`, `gemini-3.1-pro-preview-customtools-standard-short`/`-long` | Paid standard tier; prompts up to 200,000 tokens (`-short`) or above (`-long`), counting cached tokens | Same as Gemini 3.8 Flash |
 | `gemini` | `gemini-2.5-pro-standard-short`/`-long`, `gemini-2.5-flash-standard`, `gemini-2.5-flash-lite-standard` | Paid standard tier, no grounding; same 200,000-token threshold for Pro; Flash and Flash-Lite exclude audio input | `input_tokens`, `output_tokens`, `cached_input_tokens` |
@@ -367,6 +368,51 @@ if ($quote->amount !== null && $quote->amount->isLessThan('0.01')) {
 ```
 
 A quote uses the same pricing sources and calculation rules as `cost()`, but it has no completed response and no provider-reported amount. Use a cost result for accounting after a request finishes. Use a quote to decide whether to send a request.
+
+### Prices that change on a known date
+
+Some prices change on an announced date. Gemini 3.8 and 3.6 Flash, for example, cost USD 0.75 per million input tokens and 3.75 per million output tokens through 2026-12-31, and 1.50 and 7.50 from 2027-01-01. A price definition can carry an ordered list of dated rate windows instead of one set of rates. Each window applies from `effective_from` (inclusive) until `effective_until` (exclusive), in UTC unless the vendor states a timezone. The windows must be contiguous and must not overlap; only the first may be open at its start and only the last at its end. Every window prices the same units.
+
+- An actual cost uses the window in effect when the request ran. Pass that time as `at` when you cost a response later; without it, the package uses the current time.
+- A pre-run estimate bounds a run that can bill until its deadline. Pass the deadline as `until`, and each rate is the highest rate of every window that overlaps the interval from `at` (default now) to `until`. Rates are compared unit by unit, so an estimate can combine the input rate of one window with the output rate of another.
+- A time or interval that no window fully covers quotes unavailable rather than guessing.
+- A price without windows resolves exactly as before. `at` and `until` have no effect on it.
+
+```php
+use Jkudish\LaravelAiPricing\Facades\AiPricing;
+use Jkudish\LaravelAiPricing\ValueObjects\PricingObservation;
+
+// The most this run can cost if it is still billing at its deadline.
+$estimate = AiPricing::quote('gemini', 'gemini-3.8-flash-standard', $usage, until: $deadline);
+
+// A completed request, costed later at the rate in effect when it ran.
+$cost = AiPricing::cost($response, at: $requestStartedAt);
+
+// The same fields on a resolver observation.
+$quote = $resolver->resolve(new PricingObservation($identity, $usage, pricedAt: $startedAt, pricedUntil: $deadline));
+```
+
+A quote's provenance lists the windows that priced it under `rate_windows`: the one in effect for an actual cost, or every overlapping window for an estimate. In the package snapshot, a windowed entry replaces `rates` with `rate_windows`:
+
+```php
+'gemini:gemini-3.8-flash-standard' => [
+    'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+    'rate_windows' => [
+        ['effective_from' => null, 'effective_until' => '2027-01-01T00:00:00+00:00', 'rates' => [
+            'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+            'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+            // ...
+        ]],
+        ['effective_from' => '2027-01-01T00:00:00+00:00', 'effective_until' => null, 'rates' => [
+            'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+            'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+            // ...
+        ]],
+    ],
+],
+```
+
+Construct windowed definitions in code with `new PriceDefinition($identity, [], $source, rateWindows: [new RateWindow($from, $until, $rates), ...])`. Configured prices do not support windows yet.
 
 ## Streaming responses
 

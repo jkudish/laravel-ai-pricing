@@ -63,7 +63,7 @@ final readonly class PricingResolver implements CostResolver
             return CostQuote::unavailable();
         }
 
-        return $this->calculator->calculate($observation->usage, $pricing);
+        return $this->calculator->calculate($observation->usage, $pricing, $observation->pricedAt, $observation->pricedUntil);
     }
 
     /**

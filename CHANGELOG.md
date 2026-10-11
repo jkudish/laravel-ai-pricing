@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-11
+
+### Added
+
+- Dated rate windows. A `PriceDefinition` can carry an ordered list of `RateWindow`s instead of one set of rates. Each window applies from `effective_from` (inclusive) until `effective_until` (exclusive), in UTC unless the vendor states a timezone. The constructor rejects windows that overlap, leave a gap, are open inside the range, or price different units, and it rejects a definition that has both rates and windows.
+  - An actual cost uses the window in effect at the observation's new optional `pricedAt` time, or now when it is not set. `AiPricing::cost($response, at: ...)` passes it for a completed response.
+  - A pre-run maximum-cost estimate sets the observation's new optional `pricedUntil` to the run's deadline. Each rate is then the highest rate of every window overlapping `[pricedAt ?? now, pricedUntil)`, compared unit by unit. `AiPricing::quote(..., at: ..., until: ...)` exposes both.
+  - A time or interval that no window fully covers quotes unavailable instead of guessing.
+  - Quote provenance lists the windows that priced it under `rate_windows`.
+  - The package snapshot accepts `rate_windows` entries in place of `rates`, and snapshot fingerprints sort each window's rates the way they already sort `rates`, so they survive jsonb storage.
+- Windowed Gemini Developer API bases `gemini:gemini-3.8-flash-standard` and `gemini:gemini-3.6-flash-standard` (pricing snapshot v13, retrieved 2026-10-11). Per 1M tokens: USD 0.75 input, 3.75 output and 0.075 cached input through 2026-12-31, then 1.50, 7.50 and 0.15 from 2027-01-01T00:00Z. Google Search grounding stays USD 14 per 1,000 queries. Rates were checked against <https://ai.google.dev/gemini-api/docs/pricing> on 2026-10-11. Google states no timezone for the change. The dated `-standard-2026` and `-standard-2027` bases remain.
+
+- Pricing snapshot v14 (retrieved 2026-10-11) adds `xai:grok-4.7` for Laravel AI Librarium's Grok Profiles. Like `xai:grok-4.6`, it prices only the server-side tools: Web Search at USD 5 per 1,000 calls (`searches`), and X Search at USD 5 per 1,000 fetched posts (`x_search_posts`) and USD 10 per 1,000 fetched profiles (`x_search_profiles`). Token rates stay unpriced, because Grok 4.7 bills long-context rates for the whole request once a prompt reaches 200,000 tokens and US regional requests bill at 1.1x. Rates were checked against <https://docs.x.ai/developers/pricing> on 2026-10-11.
+- Pricing snapshot v15 (retrieved 2026-10-11) prices every Parallel Task API processor and every Valyu DeepResearch mode, so Laravel AI Librarium's configurable processors and modes quote:
+  - `parallel:research-lite`, `-base`, `-core`, `-core2x`, `-ultra`, `-ultra2x`, `-ultra4x` and `-ultra8x` at USD 5, 10, 25, 50, 300, 600, 1,200 and 2,400 per 1,000 successful runs (`processor_requests`), beside the existing `research-pro` at 100. Checked against <https://docs.parallel.ai/getting-started/pricing> on 2026-10-11.
+  - `valyu:research-fast`, `-heavy` and `-max` at USD 0.10, 2.50 and 15 per task (`research_requests`), beside the existing `research-standard` at 0.50, each with the same optional screenshot, code-execution and extra-deliverable units. Checked against <https://docs.valyu.ai/pricing> on 2026-10-11.
+- `anthropic:claude-sonnet-5-5-global-standard`, `openai:gpt-6.1-sol-standard-short` and `openai:gpt-6.1-sol-standard-long` now price `web_searches` at USD 10 per 1,000 searches, checked on 2026-10-11 against <https://platform.claude.com/docs/en/about-claude/pricing> and <https://developers.openai.com/api/docs/pricing>. A quote that includes searches on these bases is now complete instead of partial. OpenAI usage reports no search count, so pass `web_searches` yourself.
+
+### Changed
+
+- Prices and snapshot entries without windows resolve exactly as before, with unchanged quotes, provenance and fingerprints. `PricingObservation`, `PriceDefinition`, `PricingProvenance`, `CostCalculator::calculate()` and `AiPricing::cost()`/`quote()` gain only optional trailing parameters. A minor release is still required: callers that read `PriceDefinition::$rates` directly see an empty map for a windowed definition and must resolve its window, and consumers that rebuild a persisted definition must rebuild its `rate_windows`.
+
 ## [0.2.3] - 2026-10-10
 
 ### Added
@@ -142,6 +164,7 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
 [Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.3...main
+[0.3.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.0...v0.2.1

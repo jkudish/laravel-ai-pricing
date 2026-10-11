@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 12,
-    'retrieved_at' => '2026-10-10T01:47:24+00:00',
+    'version' => 15,
+    'retrieved_at' => '2026-10-11T09:00:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -96,7 +96,8 @@ return [
         // service_tier (standard, flex, priority) is a request field on the same model ID,
         // the Pro models are prompt-length tiered, and 3.8/3.6 Flash double their rates
         // on 2027-01-01T00:00Z, so generic native IDs cannot select a rate. Use the
-        // -standard[-short|-long|-2026|-2027] bases. gemini-3.7-flash and gemini-3.5-flash
+        // -standard[-short|-long] bases; 3.8 and 3.6 Flash -standard carry dated rate
+        // windows (the -2026/-2027 bases remain). gemini-3.7-flash and gemini-3.5-flash
         // are retired IDs that Google routes to gemini-3.8-flash and gemini-3.6-flash; the
         // -latest IDs are moving aliases whose current targets Google does not document.
         'gemini:gemini-3.8-flash',
@@ -373,13 +374,14 @@ return [
         ],
         'anthropic:claude-sonnet-5-5-global-standard' => [
             'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
-            'notes' => 'Checked 2026-10-09. Billing basis for claude-sonnet-5-5, global geography, synchronous Messages API only; not a provider alias. All context lengths. Excludes US geography (1.1x), batch and server tools. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs.',
+            'notes' => 'Checked 2026-10-11. Billing basis for claude-sonnet-5-5, global geography (inference_geo global, the default), synchronous Messages API only; not a provider alias. All context lengths up to 1M tokens bill at one rate. Excludes US geography (1.1x), batch, Bedrock, Google Cloud and Foundry. Thinking is output usage. Cache reads are 0.05x input (0.10/M). Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs. web_searches counts usage.server_tool_use.web_search_requests at USD 10 per 1,000 searches (failed searches are not billed). Code execution, web fetch tokens and other server tools are not priced here.',
             'rates' => [
                 'input_tokens' => ['amount' => '2', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '10', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
                 'cache_write_input_tokens_5m' => ['amount' => '2.50', 'per' => '1000000'],
                 'cache_write_input_tokens_1h' => ['amount' => '4', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'anthropic:claude-haiku-5-5-global-short' => [
@@ -538,22 +540,24 @@ return [
         ],
         'openai:gpt-6.1-sol-standard-short' => [
             'source' => 'https://developers.openai.com/api/docs/pricing',
-            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, at most 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'notes' => 'Checked 2026-10-11. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, at most 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
             'rates' => [
                 'input_tokens' => ['amount' => '2', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '10', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
                 'cache_write_input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'openai:gpt-6.1-sol-standard-long' => [
             'source' => 'https://developers.openai.com/api/docs/pricing',
-            'notes' => 'Checked 2026-10-09. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, more than 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and tools. Reasoning is output usage; input cache partitions are exclusive.',
+            'notes' => 'Checked 2026-10-11. Direct OpenAI billing basis for gpt-6.1-sol, standard service tier, more than 272,000 input tokens; the long-context rates apply to the full request; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
             'rates' => [
                 'input_tokens' => ['amount' => '4', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '15', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
                 'cache_write_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'openai:gpt-6-luna-standard-short' => [
@@ -1308,6 +1312,58 @@ return [
                 'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
                 'web_searches' => ['amount' => '0.014', 'per' => '1'],
+            ],
+        ],
+        'gemini:gemini-3.8-flash-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-11. Date-windowed billing basis for gemini-3.8-flash on the Gemini Developer API (generateContent or Interactions), paid tier, standard service tier (service_tier omitted or standard); not a provider alias. Google publishes introductory rates valid through December 31, 2026 and doubles every token rate from January 1, 2027. Google states no timezone, so the package changes windows at 2027-01-01T00:00Z. An actual cost uses the window in effect when the request ran; a maximum-cost estimate uses the higher rate whenever its interval reaches 2027. This basis replaces choosing between gemini-3.8-flash-standard-2026 and gemini-3.8-flash-standard-2027, which stay available. One input rate covers text, image, video and audio; documents bill at the image rate. No long-context tier. Output includes thinking tokens; no separate reasoning rate. cached_input_tokens covers implicit and explicit cache hits (input partitions are exclusive). Google publishes no per-token cache-write fee, so cache_write_input_tokens stays unpriced. Explicit-cache storage (USD 0.50 per million token-hours through 2026-12-31, 1.00 from 2027-01-01) is excluded and unpriced. web_searches counts individual Google Search grounding queries the model executes (USD 14 per 1,000 in both windows); the monthly free allowance of 5,000 is not subtracted. Google Maps grounding is excluded. Excludes batch, flex, priority, Live API and Vertex AI pricing. Re-review before 2027-01-01 in case Google changes the announced rates.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.075', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+            ],
+        ],
+        'gemini:gemini-3.6-flash-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-11. Date-windowed billing basis for gemini-3.6-flash on the Gemini Developer API (generateContent or Interactions), paid tier, standard service tier (service_tier omitted or standard); not a provider alias. Requests to the retired gemini-3.5-flash ID are routed to gemini-3.6-flash per https://ai.google.dev/gemini-api/docs/deprecations, but that ID is fallback-blocked, not aliased. Google publishes introductory rates valid through December 31, 2026 and doubles every token rate from January 1, 2027. Google states no timezone, so the package changes windows at 2027-01-01T00:00Z. An actual cost uses the window in effect when the request ran; a maximum-cost estimate uses the higher rate whenever its interval reaches 2027. This basis replaces choosing between gemini-3.6-flash-standard-2026 and gemini-3.6-flash-standard-2027, which stay available. One input rate covers text, image, video and audio; documents bill at the image rate. No long-context tier. Output includes thinking tokens; no separate reasoning rate. cached_input_tokens covers implicit and explicit cache hits (input partitions are exclusive). Google publishes no per-token cache-write fee, so cache_write_input_tokens stays unpriced. Explicit-cache storage (USD 0.50 per million token-hours through 2026-12-31, 1.00 from 2027-01-01) is excluded and unpriced. web_searches counts individual Google Search grounding queries the model executes (USD 14 per 1,000 in both windows); the monthly free allowance of 5,000 is not subtracted. Google Maps grounding is excluded. Excludes batch, flex, priority, Live API and Vertex AI pricing. Re-review before 2027-01-01 in case Google changes the announced rates.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.075', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
             ],
         ],
         'gemini:gemini-3.5-flash-lite-standard' => [
@@ -2483,11 +2539,97 @@ return [
                 'processor_requests' => ['amount' => '100', 'per' => '1000'],
             ],
         ],
+        'parallel:research-lite' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the lite processor (USD 5 per 1,000 runs; documented latency 10 seconds to 1 minute). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '5', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-base' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the base processor (USD 10 per 1,000 runs; documented latency 15 to 100 seconds). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-core' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the core processor (USD 25 per 1,000 runs; documented latency 1 to 5 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '25', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-core2x' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the core2x processor (USD 50 per 1,000 runs; documented latency 1 to 10 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '50', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-ultra' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the ultra processor (USD 300 per 1,000 runs; documented latency 5 to 25 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '300', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-ultra2x' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the ultra2x processor (USD 600 per 1,000 runs; documented latency 5 to 50 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '600', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-ultra4x' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the ultra4x processor (USD 1200 per 1,000 runs; documented latency 5 to 90 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '1200', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-ultra8x' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the ultra8x processor (USD 2400 per 1,000 runs; documented latency 5 minutes to 2 hours). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '2400', 'per' => '1000'],
+            ],
+        ],
         'valyu:research-standard' => [
             'source' => 'https://docs.valyu.ai/pricing',
             'notes' => 'Checked 2026-09-10. Base Standard DeepResearch task only. Optional screenshots, code execution, and extra deliverables are separate units and must be included when used. Prefer the response cost when reported.',
             'rates' => [
                 'research_requests' => ['amount' => '0.5', 'per' => '1'],
+                'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
+                'code_executions' => ['amount' => '0.1', 'per' => '1'],
+                'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
+            ],
+        ],
+        'valyu:research-fast' => [
+            'source' => 'https://docs.valyu.ai/pricing',
+            'notes' => 'Checked 2026-10-11. Base Fast DeepResearch task only (USD 0.1 per task; typical runtime about 5 minutes). The task price includes searches and content. Optional screenshots (USD 0.05 per URL), code execution (USD 0.10 per run) and deliverables after the first (USD 0.10 each) are separate units and must be included when used. Prices are list USD at the pay-as-you-go rate of one credit per dollar; plan credits can cost less. Prefer the response cost when reported.',
+            'rates' => [
+                'research_requests' => ['amount' => '0.1', 'per' => '1'],
+                'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
+                'code_executions' => ['amount' => '0.1', 'per' => '1'],
+                'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
+            ],
+        ],
+        'valyu:research-heavy' => [
+            'source' => 'https://docs.valyu.ai/pricing',
+            'notes' => 'Checked 2026-10-11. Base Heavy DeepResearch task only (USD 2.5 per task; typical runtime up to about 90 minutes). The task price includes searches and content. Optional screenshots (USD 0.05 per URL), code execution (USD 0.10 per run) and deliverables after the first (USD 0.10 each) are separate units and must be included when used. Prices are list USD at the pay-as-you-go rate of one credit per dollar; plan credits can cost less. Prefer the response cost when reported.',
+            'rates' => [
+                'research_requests' => ['amount' => '2.5', 'per' => '1'],
+                'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
+                'code_executions' => ['amount' => '0.1', 'per' => '1'],
+                'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
+            ],
+        ],
+        'valyu:research-max' => [
+            'source' => 'https://docs.valyu.ai/pricing',
+            'notes' => 'Checked 2026-10-11. Base Max DeepResearch task only (USD 15 per task; typical runtime up to about 180 minutes). The task price includes searches and content. Optional screenshots (USD 0.05 per URL), code execution (USD 0.10 per run) and deliverables after the first (USD 0.10 each) are separate units and must be included when used. Prices are list USD at the pay-as-you-go rate of one credit per dollar; plan credits can cost less. Prefer the response cost when reported.',
+            'rates' => [
+                'research_requests' => ['amount' => '15', 'per' => '1'],
                 'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
                 'code_executions' => ['amount' => '0.1', 'per' => '1'],
                 'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
@@ -2499,6 +2641,15 @@ return [
             'rates' => [
                 'input_tokens' => ['amount' => '0.042', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '0', 'per' => '1000000'],
+            ],
+        ],
+        'xai:grok-4.7' => [
+            'source' => 'https://docs.x.ai/developers/pricing',
+            'notes' => 'Checked 2026-10-11. Web Search bills $5 per 1k calls (searches). X Search bills per item fetched: every post returned by a search or thread fetch, including parent and quoted posts, counts toward x_search_posts at $5 per 1k, and every profile returned by a user search counts toward x_search_profiles at $10 per 1k. Map usage.server_side_tool_usage_details web_search_calls to searches, x_posts_fetched to x_search_posts, and x_users_fetched to x_search_profiles; never map x_search_calls onto the per-item units. Token rates are omitted because grok-4.7 bills its long-context rates for the whole request once a prompt reaches 200k tokens ($2.00/$0.50/$6.00 per 1M input/cached/output below, $4.00/$1.00/$12.00 at or above) and US regional requests bill at 1.1x, which this snapshot cannot select safely.',
+            'rates' => [
+                'searches' => ['amount' => '5', 'per' => '1000'],
+                'x_search_posts' => ['amount' => '5', 'per' => '1000'],
+                'x_search_profiles' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'xai:grok-4.6' => [

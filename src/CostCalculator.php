@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Jkudish\LaravelAiPricing;
 
 use Brick\Math\BigDecimal;
+use DateTimeInterface;
+use Illuminate\Support\Carbon;
 use Jkudish\LaravelAiPricing\Enums\CostCompleteness;
 use Jkudish\LaravelAiPricing\ValueObjects\CostQuote;
 use Jkudish\LaravelAiPricing\ValueObjects\Money;
@@ -12,6 +14,7 @@ use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Jkudish\LaravelAiPricing\ValueObjects\PricingProvenance;
 use Jkudish\LaravelAiPricing\ValueObjects\PricingSnapshot;
 use Jkudish\LaravelAiPricing\ValueObjects\Rate;
+use Jkudish\LaravelAiPricing\ValueObjects\RateWindow;
 use Jkudish\LaravelAiPricing\ValueObjects\Usage;
 
 final class CostCalculator
@@ -22,8 +25,24 @@ final class CostCalculator
         'cache_write_input_tokens_1h',
     ];
 
-    public function calculate(Usage $usage, PriceDefinition $pricing): CostQuote
-    {
+    /**
+     * Price usage against a definition.
+     *
+     * Time only matters when the definition has dated rate windows. Without
+     * $until the usage is an actual cost and prices at the window in effect
+     * at $at (default now). With $until it is a maximum-cost estimate for a
+     * run that can bill at any instant of [$at, $until): each rate is the
+     * highest rate of every window overlapping that interval. An instant or
+     * interval outside the windows prices nothing, so the quote is
+     * unavailable rather than guessed.
+     */
+    public function calculate(
+        Usage $usage,
+        PriceDefinition $pricing,
+        ?DateTimeInterface $at = null,
+        ?DateTimeInterface $until = null,
+    ): CostQuote {
+        [$rates, $windows] = $this->ratesFor($pricing, $at, $until);
         $total = null;
         $missing = [];
         $outputFamilySettled = false;
@@ -41,7 +60,7 @@ final class CostCalculator
 
                 $cacheWriteFamilySettled = true;
 
-                [$lines, $missingUnits] = $this->settleCacheWriteFamily($usage, $pricing);
+                [$lines, $missingUnits] = $this->settleCacheWriteFamily($usage, $rates);
 
                 foreach ($lines as $line) {
                     $total = $total instanceof Money ? $total->plus($line) : $line;
@@ -61,7 +80,7 @@ final class CostCalculator
 
                 $outputFamilySettled = true;
 
-                [$lines, $missingUnits] = $this->settleOutputFamily($usage, $pricing);
+                [$lines, $missingUnits] = $this->settleOutputFamily($usage, $rates);
 
                 foreach ($lines as $line) {
                     $total = $total instanceof Money ? $total->plus($line) : $line;
@@ -74,7 +93,7 @@ final class CostCalculator
                 continue;
             }
 
-            $rate = $pricing->rates[$unit] ?? null;
+            $rate = $rates[$unit] ?? null;
 
             if ($rate === null) {
                 $missing[] = $unit;
@@ -93,7 +112,7 @@ final class CostCalculator
                 source: $pricing->source,
                 snapshot: new PricingSnapshot($pricing),
                 missingUnits: $missing,
-                provenance: new PricingProvenance($pricing->source, $pricing->effectiveAt, $pricing->retrievedAt, $pricing->sourceReference),
+                provenance: new PricingProvenance($pricing->source, $pricing->effectiveAt, $pricing->retrievedAt, $pricing->sourceReference, $windows),
             );
         }
 
@@ -103,8 +122,41 @@ final class CostCalculator
             source: $pricing->source,
             snapshot: new PricingSnapshot($pricing),
             missingUnits: $missing,
-            provenance: new PricingProvenance($pricing->source, $pricing->effectiveAt, $pricing->retrievedAt, $pricing->sourceReference),
+            provenance: new PricingProvenance($pricing->source, $pricing->effectiveAt, $pricing->retrievedAt, $pricing->sourceReference, $windows),
         );
+    }
+
+    /**
+     * The rates that price this calculation and the windows they came from.
+     *
+     * @return array{0: array<string, Rate>, 1: list<RateWindow>}
+     */
+    private function ratesFor(PriceDefinition $pricing, ?DateTimeInterface $at, ?DateTimeInterface $until): array
+    {
+        if (! $pricing->isWindowed()) {
+            return [$pricing->rates, []];
+        }
+
+        $at ??= Carbon::now();
+
+        if ($until === null) {
+            $window = $pricing->windowAt($at);
+
+            return $window === null ? [[], []] : [$window->rates, [$window]];
+        }
+
+        $windows = $pricing->windowsCovering($at, $until);
+        $rates = [];
+
+        foreach ($windows as $window) {
+            foreach ($window->rates as $unit => $rate) {
+                if (! isset($rates[$unit]) || $rate->exceeds($rates[$unit])) {
+                    $rates[$unit] = $rate;
+                }
+            }
+        }
+
+        return [$rates, $windows];
     }
 
     /**
@@ -128,14 +180,15 @@ final class CostCalculator
      * reasoning within the output rate must omit the rate rather than
      * publish zero.
      *
+     * @param  array<string, Rate>  $rates
      * @return array{0: list<Money>, 1: list<string>}
      */
-    private function settleOutputFamily(Usage $usage, PriceDefinition $pricing): array
+    private function settleOutputFamily(Usage $usage, array $rates): array
     {
         $output = $usage->quantity('output_tokens');
         $reasoning = $usage->quantity('reasoning_tokens');
-        $outputRate = $pricing->rates['output_tokens'] ?? null;
-        $reasoningRate = $pricing->rates['reasoning_tokens'] ?? null;
+        $outputRate = $rates['output_tokens'] ?? null;
+        $reasoningRate = $rates['reasoning_tokens'] ?? null;
 
         if ($reasoning->isZero()) {
             $segments = [
@@ -202,17 +255,18 @@ final class CostCalculator
      * that only publishes TTL-specific rates: it stays a missing unit, so the
      * quote is partial instead of guessing which TTL was written.
      *
+     * @param  array<string, Rate>  $rates
      * @return array{0: list<Money>, 1: list<string>}
      */
-    private function settleCacheWriteFamily(Usage $usage, PriceDefinition $pricing): array
+    private function settleCacheWriteFamily(Usage $usage, array $rates): array
     {
         $aggregate = $usage->quantity('cache_write_input_tokens');
         $fiveMinute = $usage->quantity('cache_write_input_tokens_5m');
         $oneHour = $usage->quantity('cache_write_input_tokens_1h');
         $split = $fiveMinute->plus($oneHour);
-        $genericRate = $pricing->rates['cache_write_input_tokens'] ?? null;
-        $fiveMinuteRate = $pricing->rates['cache_write_input_tokens_5m'] ?? null;
-        $oneHourRate = $pricing->rates['cache_write_input_tokens_1h'] ?? null;
+        $genericRate = $rates['cache_write_input_tokens'] ?? null;
+        $fiveMinuteRate = $rates['cache_write_input_tokens_5m'] ?? null;
+        $oneHourRate = $rates['cache_write_input_tokens_1h'] ?? null;
 
         if ($split->isZero()) {
             return $this->priceSegments([
