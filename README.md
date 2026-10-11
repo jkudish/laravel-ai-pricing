@@ -125,8 +125,8 @@ The snapshot-level `retrieved_at` records when the package snapshot was assemble
 | `perplexity` | `agent-low`, `agent-medium`, `agent-high` | `web_searches`, `fetch_url_requests`, `people_searches`, `finance_searches`, `sandbox_sessions`, `sandbox_searches` |
 | `perplexity` | `search` | `requests` |
 | `parallel` | `turbo` | `requests`, `additional_results` |
-| `parallel` | `research-pro` | `processor_requests` |
-| `valyu` | `research-standard` | `research_requests`, `screenshot_urls`, `code_executions`, `additional_deliverables` |
+| `parallel` | `research-lite`, `research-base`, `research-core`, `research-core2x`, `research-pro`, `research-ultra`, `research-ultra2x`, `research-ultra4x`, `research-ultra8x` | `processor_requests` |
+| `valyu` | `research-fast`, `research-standard`, `research-heavy`, `research-max` | `research_requests`, `screenshot_urls`, `code_executions`, `additional_deliverables` |
 | `typesafe` | `jev-1.13.0` (aliases `jev-latest`, `jev-preview`) | `input_tokens`, `output_tokens` (free) |
 | `xai` | `grok-4.7`, `grok-4.6` | `searches`, `x_search_posts`, `x_search_profiles` |
 
@@ -149,9 +149,9 @@ The PHP v2 parity profiles use these pricing identities and dispositions:
 | `grok`, `grok-x-only/x`, `grok-combined/combined` | `xai:grok-4.7` (or `xai:grok-4.6` for the previous model) | Built-in current Web Search and per-item X Search rates only; context-tiered model tokens remain partial or unavailable. |
 | `parallel/search` | `parallel:search` | Configured-only: the selectable mode and additional-result count determine the price. |
 | `parallel/turbo` | `parallel:turbo` | Built-in fixed Turbo request and additional-result rates. |
-| `parallel/research` (pro) | `parallel:research-pro` | Built-in fixed rate per successful pro processor run; other processors need distinct configured identities. |
+| `parallel/research` | `parallel:research-{processor}` | Built-in fixed rate per successful run for every listed processor, `lite` through `ultra8x`. |
 | `valyu/search` | `valyu:search` | Unavailable: every result can use a differently priced source class. |
-| `valyu/research` (standard) | `valyu:research-standard` | Built-in Standard base and optional-tool rates; provider-reported response cost is preferred. |
+| `valyu/research` | `valyu:research-{mode}` | Built-in Fast, Standard, Heavy and Max base and optional-tool rates; provider-reported response cost is preferred. |
 | `firecrawl-search/search` | `firecrawl:search` | Configured-only: the API uses fixed credits, but USD per credit depends on the account plan. |
 
 Configured-only and unavailable identities are recorded as fallback-blocked policy, not zero-value price entries. This prevents a coincidentally named Portkey model from supplying an incompatible price, while still allowing provider-reported actual cost or an explicitly configured application rate. Configure the exact identity and account rate when you can prove its applicability.

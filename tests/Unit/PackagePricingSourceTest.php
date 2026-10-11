@@ -57,6 +57,17 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'Parallel Turbo' => ['parallel', 'turbo', 'additional_results', '1', '1000'],
     'Parallel Research Pro' => ['parallel', 'research-pro', 'processor_requests', '100', '1000'],
     'Valyu Research Standard' => ['valyu', 'research-standard', 'research_requests', '0.5', '1'],
+    'Parallel Research lite' => ['parallel', 'research-lite', 'processor_requests', '5', '1000'],
+    'Parallel Research base' => ['parallel', 'research-base', 'processor_requests', '10', '1000'],
+    'Parallel Research core' => ['parallel', 'research-core', 'processor_requests', '25', '1000'],
+    'Parallel Research core2x' => ['parallel', 'research-core2x', 'processor_requests', '50', '1000'],
+    'Parallel Research ultra' => ['parallel', 'research-ultra', 'processor_requests', '300', '1000'],
+    'Parallel Research ultra2x' => ['parallel', 'research-ultra2x', 'processor_requests', '600', '1000'],
+    'Parallel Research ultra4x' => ['parallel', 'research-ultra4x', 'processor_requests', '1200', '1000'],
+    'Parallel Research ultra8x' => ['parallel', 'research-ultra8x', 'processor_requests', '2400', '1000'],
+    'Valyu Research fast' => ['valyu', 'research-fast', 'research_requests', '0.1', '1'],
+    'Valyu Research heavy' => ['valyu', 'research-heavy', 'research_requests', '2.5', '1'],
+    'Valyu Research max' => ['valyu', 'research-max', 'research_requests', '15', '1'],
     'TypeSafe Jev 1.13 input' => ['typesafe', 'jev-1.13.0', 'input_tokens', '0.042', '1000000'],
     'TypeSafe Jev 1.13 free output' => ['typesafe', 'jev-1.13.0', 'output_tokens', '0', '1000000'],
     'xAI Grok 4.6' => ['xai', 'grok-4.6', 'searches', '5', '1000'],
@@ -272,13 +283,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T07:30:00+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:00:00+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T07:30:00+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:00:00+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -298,8 +309,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(14)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-11T07:30:00+00:00')
+    expect($snapshot['version'])->toBe(15)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-11T09:00:00+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -349,7 +360,7 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T07:30:00+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:00:00+00:00')
         ->and($definition->effectiveAt)->toBeNull()
         ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain('Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
@@ -499,6 +510,17 @@ it('covers every PHP parity profile with its pricing identity and disposition', 
     'parallel/research pro' => ['parallel', 'research-pro', true],
     'valyu/search' => ['valyu', 'search', false],
     'valyu/research standard' => ['valyu', 'research-standard', true],
+    'parallel/research lite' => ['parallel', 'research-lite', true],
+    'parallel/research base' => ['parallel', 'research-base', true],
+    'parallel/research core' => ['parallel', 'research-core', true],
+    'parallel/research core2x' => ['parallel', 'research-core2x', true],
+    'parallel/research ultra' => ['parallel', 'research-ultra', true],
+    'parallel/research ultra2x' => ['parallel', 'research-ultra2x', true],
+    'parallel/research ultra4x' => ['parallel', 'research-ultra4x', true],
+    'parallel/research ultra8x' => ['parallel', 'research-ultra8x', true],
+    'valyu/research fast' => ['valyu', 'research-fast', true],
+    'valyu/research heavy' => ['valyu', 'research-heavy', true],
+    'valyu/research max' => ['valyu', 'research-max', true],
     'firecrawl-search/search' => ['firecrawl', 'search', false],
 ]);
 
@@ -1167,4 +1189,31 @@ it('quotes one model per new family against a hand-calculated total', function (
     'GLM 5.2 direct' => ['zai', 'glm-5.2', ['input_tokens' => 1_000_000, 'cached_input_tokens' => 1_000_000, 'output_tokens' => 1_000_000], '6.06'],
     // 1M x 3/M + 100,000 x 6/M + 100,000 x 15/M = 3 + 0.6 + 1.5.
     'Kimi K3 1-hour cache write' => ['moonshot', 'kimi-k3', ['input_tokens' => 1_000_000, 'cache_write_input_tokens_1h' => 100_000, 'output_tokens' => 100_000], '5.1'],
+]);
+
+it('quotes every Parallel processor and Valyu DeepResearch mode per run', function (string $key, array $usage, string $expected): void {
+    [$provider, $model] = explode(':', $key, 2);
+    $definition = packagePricingSource()->find(new ModelIdentity($provider, $model));
+    expect($definition)->not->toBeNull();
+    assert($definition !== null);
+
+    $quote = (new CostCalculator)->calculate(new Usage($usage), $definition);
+
+    expect($quote->cost?->amount->isEqualTo($expected))->toBeTrue()
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toStartWith('Checked 2026-10-11.');
+})->with([
+    // One successful run at the documented USD per 1,000 runs.
+    'Parallel lite' => ['parallel:research-lite', ['processor_requests' => 1], '0.005'],
+    'Parallel base' => ['parallel:research-base', ['processor_requests' => 1], '0.01'],
+    'Parallel core' => ['parallel:research-core', ['processor_requests' => 1], '0.025'],
+    'Parallel core2x' => ['parallel:research-core2x', ['processor_requests' => 1], '0.05'],
+    'Parallel ultra' => ['parallel:research-ultra', ['processor_requests' => 1], '0.3'],
+    'Parallel ultra2x' => ['parallel:research-ultra2x', ['processor_requests' => 1], '0.6'],
+    'Parallel ultra4x' => ['parallel:research-ultra4x', ['processor_requests' => 1], '1.2'],
+    'Parallel ultra8x' => ['parallel:research-ultra8x', ['processor_requests' => 1], '2.4'],
+    'Valyu fast' => ['valyu:research-fast', ['research_requests' => 1], '0.1'],
+    // 2.50 task + 3 x 0.05 screenshots + 1 x 0.10 code run + 2 x 0.10 extra deliverables = 2.95.
+    'Valyu heavy with tools' => ['valyu:research-heavy', ['research_requests' => 1, 'screenshot_urls' => 3, 'code_executions' => 1, 'additional_deliverables' => 2], '2.95'],
+    'Valyu max' => ['valyu:research-max', ['research_requests' => 1], '15'],
 ]);

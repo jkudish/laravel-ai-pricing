@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 14,
-    'retrieved_at' => '2026-10-11T07:30:00+00:00',
+    'version' => 15,
+    'retrieved_at' => '2026-10-11T09:00:00+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -2539,11 +2539,97 @@ return [
                 'processor_requests' => ['amount' => '100', 'per' => '1000'],
             ],
         ],
+        'parallel:research-lite' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the lite processor (USD 5 per 1,000 runs; documented latency 10 seconds to 1 minute). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '5', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-base' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the base processor (USD 10 per 1,000 runs; documented latency 15 to 100 seconds). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-core' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the core processor (USD 25 per 1,000 runs; documented latency 1 to 5 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '25', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-core2x' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the core2x processor (USD 50 per 1,000 runs; documented latency 1 to 10 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '50', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-ultra' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the ultra processor (USD 300 per 1,000 runs; documented latency 5 to 25 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '300', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-ultra2x' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the ultra2x processor (USD 600 per 1,000 runs; documented latency 5 to 50 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '600', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-ultra4x' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the ultra4x processor (USD 1200 per 1,000 runs; documented latency 5 to 90 minutes). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '1200', 'per' => '1000'],
+            ],
+        ],
+        'parallel:research-ultra8x' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-11. Price per successful Task API run using the ultra8x processor (USD 2400 per 1,000 runs; documented latency 5 minutes to 2 hours). One charge per run regardless of output fields; failed runs are not billed.',
+            'rates' => [
+                'processor_requests' => ['amount' => '2400', 'per' => '1000'],
+            ],
+        ],
         'valyu:research-standard' => [
             'source' => 'https://docs.valyu.ai/pricing',
             'notes' => 'Checked 2026-09-10. Base Standard DeepResearch task only. Optional screenshots, code execution, and extra deliverables are separate units and must be included when used. Prefer the response cost when reported.',
             'rates' => [
                 'research_requests' => ['amount' => '0.5', 'per' => '1'],
+                'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
+                'code_executions' => ['amount' => '0.1', 'per' => '1'],
+                'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
+            ],
+        ],
+        'valyu:research-fast' => [
+            'source' => 'https://docs.valyu.ai/pricing',
+            'notes' => 'Checked 2026-10-11. Base Fast DeepResearch task only (USD 0.1 per task; typical runtime about 5 minutes). The task price includes searches and content. Optional screenshots (USD 0.05 per URL), code execution (USD 0.10 per run) and deliverables after the first (USD 0.10 each) are separate units and must be included when used. Prices are list USD at the pay-as-you-go rate of one credit per dollar; plan credits can cost less. Prefer the response cost when reported.',
+            'rates' => [
+                'research_requests' => ['amount' => '0.1', 'per' => '1'],
+                'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
+                'code_executions' => ['amount' => '0.1', 'per' => '1'],
+                'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
+            ],
+        ],
+        'valyu:research-heavy' => [
+            'source' => 'https://docs.valyu.ai/pricing',
+            'notes' => 'Checked 2026-10-11. Base Heavy DeepResearch task only (USD 2.5 per task; typical runtime up to about 90 minutes). The task price includes searches and content. Optional screenshots (USD 0.05 per URL), code execution (USD 0.10 per run) and deliverables after the first (USD 0.10 each) are separate units and must be included when used. Prices are list USD at the pay-as-you-go rate of one credit per dollar; plan credits can cost less. Prefer the response cost when reported.',
+            'rates' => [
+                'research_requests' => ['amount' => '2.5', 'per' => '1'],
+                'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
+                'code_executions' => ['amount' => '0.1', 'per' => '1'],
+                'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
+            ],
+        ],
+        'valyu:research-max' => [
+            'source' => 'https://docs.valyu.ai/pricing',
+            'notes' => 'Checked 2026-10-11. Base Max DeepResearch task only (USD 15 per task; typical runtime up to about 180 minutes). The task price includes searches and content. Optional screenshots (USD 0.05 per URL), code execution (USD 0.10 per run) and deliverables after the first (USD 0.10 each) are separate units and must be included when used. Prices are list USD at the pay-as-you-go rate of one credit per dollar; plan credits can cost less. Prefer the response cost when reported.',
+            'rates' => [
+                'research_requests' => ['amount' => '15', 'per' => '1'],
                 'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
                 'code_executions' => ['amount' => '0.1', 'per' => '1'],
                 'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
