@@ -11,6 +11,7 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 use Jkudish\LaravelAiPricing\Contracts\PricingCatalog;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
 use Jkudish\LaravelAiPricing\Support\Endpoint;
+use Jkudish\LaravelAiPricing\Support\PricingJson;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Jkudish\LaravelAiPricing\ValueObjects\Rate;
@@ -107,11 +108,11 @@ final class PortkeyPricingSource implements PricingCatalog
     {
         $provider = $this->normalizedProvider($provider);
         $url = $this->sourceUrl($provider);
-        $payload = $this->http->acceptJson()->get($url)->throw()->json();
+        $payload = PricingJson::decode($this->http->acceptJson()->get($url)->throw()->body());
 
-        $catalog = is_array($payload) ? $this->record($payload) : [];
+        $catalog = is_array($payload) ? $this->usableModels($this->record($payload)) : [];
 
-        if (! $this->hasUsableModel($catalog)) {
+        if ($catalog === []) {
             throw new UnexpectedValueException('Portkey returned an empty or unusable pricing catalog.');
         }
 
@@ -183,7 +184,11 @@ final class PortkeyPricingSource implements PricingCatalog
         }
 
         $currency = is_string($pricingConfig['currency'] ?? null) ? $pricingConfig['currency'] : 'USD';
-        $rates = $this->rates($payAsYouGo, $currency);
+        try {
+            $rates = $this->rates($payAsYouGo, $currency);
+        } catch (Throwable) {
+            return null;
+        }
 
         if ($rates === []) {
             return null;
@@ -258,10 +263,12 @@ final class PortkeyPricingSource implements PricingCatalog
         return $record;
     }
 
-    /** @param array<string, mixed> $catalog */
-    private function hasUsableModel(array $catalog): bool
+    /** @param array<string, mixed> $catalog
+     * @return array<string, mixed>
+     */
+    private function usableModels(array $catalog): array
     {
-        $usable = false;
+        $usable = [];
 
         foreach ($catalog as $modelName => $model) {
             $config = is_array($model) ? ($model['pricing_config'] ?? null) : null;
@@ -273,8 +280,12 @@ final class PortkeyPricingSource implements PricingCatalog
 
             $currency = is_string($config['currency'] ?? null) ? $config['currency'] : 'USD';
 
-            if ($this->rates($payAsYouGo, $currency) !== []) {
-                $usable = true;
+            try {
+                if ($this->rates($payAsYouGo, $currency) !== []) {
+                    $usable[$modelName] = $model;
+                }
+            } catch (Throwable) {
+                continue;
             }
         }
 

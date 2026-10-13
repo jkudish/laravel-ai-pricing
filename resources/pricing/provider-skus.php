@@ -8,11 +8,53 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 16,
-    'retrieved_at' => '2026-10-11T09:45:00+00:00',
+    'version' => 17,
+    'retrieved_at' => '2026-10-13T02:14:22+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
+        // Checked 2026-10-13 against the official model and pricing pages.
+        // Endpoint, service tier, geography and modality quantities must be
+        // explicit. Duration estimates are not transcription billing rates.
+        'subq:subq-preview',
+        'openai:gpt-5.5-cyber',
+        'openai:gpt-rosalind-discovery',
+        'openai:gpt-image-2.5-sunburst',
+        'openai:gpt-image-2.5-flare',
+        'openai:gpt-live-1',
+        'openai:gpt-realtime-2.1',
+        'openai:gpt-realtime-2.1-mini',
+        'openai:gpt-transcribe',
+        'openai:gpt-live-transcribe',
+        'openai:gpt-realtime-whisper',
+        'openai:gpt-realtime-translate',
+        'openai:gpt-4o-transcribe',
+        'openai:gpt-4o-mini-transcribe',
+        'openai:gpt-4o-transcribe-diarize',
+        'openai:gpt-audio-1.5',
+        'gemini:gemini-3.8-live',
+        'gemini:gemini-3.8-live-extended-thinking',
+        'gemini:gemini-3.8-flash-tts',
+        'gemini:gemini-3.8-flash-lite-tts',
+        'gemini:gemini-nano-banana-2.1',
+        'gemini:gemini-embedding-2',
+        'gemini:gemini-robotics-er-2-preview',
+        'gemini:gemini-robotics-er-2-streaming-preview',
+        'gemini:gemini-omni-1.1-flash',
+        'gemini:gemini-3.5-transcribe',
+        'gemini:gemini-3.5-transcribe-live',
+        'gemini:gemini-3.5-live-translate-preview',
+        'gemini:veo-3.1-generate-preview',
+        'gemini:veo-3.1-fast-generate-preview',
+        'gemini:veo-3.1-lite-generate-preview',
+        'gemini:lyria-3.5',
+        // OpenRouter's 3.8 cache-write value has unverified storage semantics;
+        // standard global routing is priced only by the reviewed dated basis.
+        'openrouter:google/gemini-3.8-flash',
+        'openrouter:google/gemini-3.8-flash-standard',
+        // image_output is per image in the public schema, but looks like a
+        // per-token rate in this live catalog. Do not choose either unit.
+        'openrouter:google/gemini-nano-banana-2.1',
         // Checked 2026-10-09 against https://platform.claude.com/docs/en/about-claude/pricing
         // and https://platform.claude.com/docs/en/about-claude/models/overview.
         // Generic identities cannot distinguish geography, fast mode or Haiku's
@@ -349,18 +391,446 @@ return [
         'firecrawl:search',
     ],
     /*
-     * Provider-documented moving aliases that currently resolve to a reviewed
-     * versioned identity. The alias keeps its own public identity; only the
-     * rate lookup follows the target. Re-review whenever the provider moves an
-     * alias, because a completed response reports the versioned model it ran.
+     * Provider-documented moving aliases or equivalent source-local selectors.
+     * The alias keeps its own public identity; only the rate lookup follows
+     * the target. No selector chooses a geography, context or service tier.
+     * Re-review moving aliases whenever the provider changes their target.
      */
     'aliases' => [
         'typesafe:jev-latest' => 'typesafe:jev-1.13.0',
         'typesafe:jev-preview' => 'typesafe:jev-1.13.0',
         'anthropic:claude-opus-4-5' => 'anthropic:claude-opus-4-5-20251101',
         'anthropic:claude-haiku-4-5' => 'anthropic:claude-haiku-4-5-20251001',
+        'cloudflare:clef' => 'cloudflare:@cf/cloudflare/clef',
+        'cloudflare:clef-flash' => 'cloudflare:@cf/cloudflare/clef-flash',
+        'cloudflare:clef-omni' => 'cloudflare:@cf/cloudflare/clef-omni',
     ],
     'prices' => [
+        'subq:subq-snap-preview' => [
+            'source' => 'https://docs.subq.ai/using-the-api/models/',
+            'notes' => 'Checked 2026-10-13. SubQ Snap Preview on the Decisions endpoint, public preview: USD 0.05 per million input tokens, explicitly free output. Text and image input; use the billed input token count, not an image count. No cache or per-request price is published. subq-preview is a different early-access chat model with no published price and remains unavailable.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.05', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-5.6-cyber-standard-short' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT-5.6 Cyber, approved Daybreak access, standard non-regional, non-FedRAMP processing, at most 272,000 total prompt tokens including cache hits and writes. Not an alias. The model page caps input at 272,000 but also describes a >272K multiplier; no long basis is published here for unsupported input. All request tokens bill at the selected tier. Exclusive uncached/read/write input partitions; reasoning is included in output. Cache writes are 1.25x input. Excludes batch, flex, fast, ultrafast and tools. Regional and FedRAMP uplifts are excluded.',
+            'rates' => [
+                'input_tokens' => ['amount' => '12.50', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '15.625', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '75', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-5.5-cyber-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT-5.5 Cyber standard non-regional, non-FedRAMP processing; qualified billing basis, not an alias. Restricted to at most 272,000 total prompt tokens, including cache hits; no long price or cache-write rate is published in the Cyber table. Reasoning is inclusive output. Excludes batch, flex, fast, ultrafast, regional uplifts and tools.',
+            'rates' => [
+                'input_tokens' => ['amount' => '12.50', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '75', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-rosalind-research-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT-Rosalind Research trusted-access program, approved internal research, standard non-regional, non-FedRAMP processing. Billing begins October 5, 2026; UTC midnight is assumed because OpenAI states no timezone. No pre-billing window is inferred. Cache-write pricing does not apply; only exclusive uncached input and cache reads are priced. Reasoning is inclusive output. Excludes regional uplift, batch, flex, fast, ultrafast and tool usage. Qualified billing basis, not an alias.',
+            'rate_windows' => [
+                [
+                    'effective_from' => '2026-10-05T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '25', 'per' => '1000000'],
+                    ],
+                ],
+            ],
+        ],
+        'openai:gpt-rosalind-discovery-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Published GPT-Rosalind Discovery life-sciences price, trusted-access program only, standard non-regional, non-FedRAMP processing. Qualified billing basis, not an alias or a rewrite of Research. Exclusive input/cache-read quantities; no cache-write fee is published. Reasoning is inclusive output. Excludes regional uplift, batch, flex, fast, ultrafast and tools. No effective date is published for Discovery; the October 5 billing announcement names Research only.',
+            'rates' => [
+                'input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '25', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-image-2.5-sunburst-standard-responses' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT Image 2.5 Sunburst, standard Responses API only, non-regional, non-FedRAMP processing. Qualified billing basis, not an alias. Text and image input tokens and their cached subsets are exclusive disjoint quantities; image output is tokens, never images. Cached discounts are documented only for the Responses API. Generic inclusive input/output and image counts remain unpriced. No text-output price is published. Excludes batch and regional uplift.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'cached_text_input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '8', 'per' => '1000000'],
+                'cached_image_input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'image_output_tokens' => ['amount' => '30', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-image-2.5-flare-standard-responses' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT Image 2.5 Flare, standard Responses API only, non-regional, non-FedRAMP processing. Qualified billing basis, not an alias. Exclusive text/image uncached input and cache-read partitions. Output images bill by image tokens, not image count. Cached discounts apply only to Responses API. Inclusive totals, text output, batch and regional uplift are not priced.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'cached_text_input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '8', 'per' => '1000000'],
+                'cached_image_input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'image_output_tokens' => ['amount' => '30', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-image-2.5-sunburst-standard-images' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT Image 2.5 Sunburst, standard Images API generation/edit endpoint, non-regional, non-FedRAMP processing. Qualified billing basis, not an alias. Exclusive uncached text and image input tokens, image output tokens. No cache discount is published for Images API: cache quantities remain missing, never reuse Responses rates. No inclusive totals, text-output rate, per-image fee, batch or regional uplift.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '8', 'per' => '1000000'],
+                'image_output_tokens' => ['amount' => '30', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-image-2.5-flare-standard-images' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT Image 2.5 Flare, standard Images API generation/edit endpoint, non-regional, non-FedRAMP processing. Qualified billing basis, not an alias. Exclusive uncached text and image input tokens, image output tokens. Cache discounts are Responses-only, so cache quantities remain missing here. Inclusive totals, text output, image counts, batch and regional uplift remain unpriced.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '8', 'per' => '1000000'],
+                'image_output_tokens' => ['amount' => '30', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-live-1-session' => [
+            'source' => 'https://developers.openai.com/api/docs/models/gpt-live-1',
+            'notes' => 'Checked 2026-10-13. GPT-Live 1 voice-session duration only, USD 0.05 per minute billed per second without rounding up. voice_session_seconds is elapsed billable session time, not audio tokens or generated-audio duration. Backend model calls and tools are separately billed and must be quoted using their own definitions. No backend usage is included in this session-only basis; any such units remain missing. Qualified endpoint basis, not an alias.',
+            'rates' => [
+                'voice_session_seconds' => ['amount' => '0.05', 'per' => '60'],
+            ],
+        ],
+        'openai:gpt-realtime-2.1-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT-Realtime 2.1 standard Realtime API, non-regional, non-FedRAMP processing. Exclusive disjoint text/audio/image input, modality-specific cache reads and text/audio output tokens; generic inclusive totals are unpriced. Reasoning must be included in the appropriate billed output modality, not added again. No image output price is published. Excludes regional uplift, other service tiers and tools. Qualified basis, not an alias.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                'cached_text_input_tokens' => ['amount' => '0.40', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '24', 'per' => '1000000'],
+                'audio_input_tokens' => ['amount' => '32', 'per' => '1000000'],
+                'cached_audio_input_tokens' => ['amount' => '0.40', 'per' => '1000000'],
+                'audio_output_tokens' => ['amount' => '64', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'cached_image_input_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-realtime-2.1-mini-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT-Realtime 2.1 Mini standard Realtime API, non-regional, non-FedRAMP processing. Qualified basis, not an alias. Exclusive uncached text/audio/image input, modality-specific cached input and text/audio output tokens. Generic inclusive totals, image output, regional uplift, other service tiers and tools remain unpriced; reasoning is included in the billed output modality.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '0.60', 'per' => '1000000'],
+                'cached_text_input_tokens' => ['amount' => '0.06', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '2.40', 'per' => '1000000'],
+                'audio_input_tokens' => ['amount' => '10', 'per' => '1000000'],
+                'cached_audio_input_tokens' => ['amount' => '0.30', 'per' => '1000000'],
+                'audio_output_tokens' => ['amount' => '20', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '0.80', 'per' => '1000000'],
+                'cached_image_input_tokens' => ['amount' => '0.08', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-realtime-translate-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/models/gpt-realtime-translate',
+            'notes' => 'Checked 2026-10-13. GPT-Realtime-Translate dedicated realtime translation endpoint. The model page explicitly states pricing by audio duration rather than text tokens and publishes USD 0.034 per minute. audio_seconds is billable source-audio duration; text tokens and generated audio are not alternative additive fees. Standard non-regional, non-FedRAMP processing only, excludes other service tiers. Qualified endpoint basis, not an alias.',
+            'rates' => [
+                'audio_seconds' => ['amount' => '0.034', 'per' => '60'],
+            ],
+        ],
+        'openai:gpt-4o-transcribe-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/models/gpt-4o-transcribe',
+            'notes' => 'Checked 2026-10-13. GPT-4o Transcribe standard transcription, audio input tokens and text output tokens. The model page publishes 2.50/M input and 10/M output. The pricing page labels USD 0.006/min an estimated cost, not a duration rate: audio_seconds remains unpriced. Text prompt input and cached input have no separately verified rate here. Qualified basis, not an alias; excludes other service tiers and separately billed tools.',
+            'rates' => [
+                'audio_input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '10', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-4o-mini-transcribe-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT-4o Mini Transcribe standard transcription, exclusive audio input and text output tokens at 1.25/M and 5/M. USD 0.003/min is an estimated cost, not a duration rate, so audio_seconds remains missing. Text prompt input and cache quantities unpriced. Qualified basis, not an alias; excludes other service tiers and tools.',
+            'rates' => [
+                'audio_input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '5', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-4o-transcribe-diarize-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. GPT-4o Transcribe Diarize standard transcription with speaker labels. Exclusive audio input and text output tokens at 2.50/M and 10/M. USD 0.006/min is an estimated cost, not a duration rate. No audio_seconds, text prompt input or cache rate is inferred. Qualified basis, not an alias; excludes other service tiers and tools.',
+            'rates' => [
+                'audio_input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '10', 'per' => '1000000'],
+            ],
+        ],
+        'openai:gpt-audio-1.5-standard-chat' => [
+            'source' => 'https://developers.openai.com/api/docs/models/gpt-audio-1.5',
+            'notes' => 'Checked 2026-10-13. GPT-Audio 1.5 standard Chat Completions REST API, non-regional, non-FedRAMP processing. The model page supports v1/chat/completions, not Responses or Realtime. Exclusive text/audio input and output tokens. No cached-input rate is published; generic inclusive totals and duration equivalents remain unpriced. Excludes other service tiers, regional uplift and tools. Qualified endpoint basis, not an alias.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                'audio_input_tokens' => ['amount' => '32', 'per' => '1000000'],
+                'audio_output_tokens' => ['amount' => '64', 'per' => '1000000'],
+            ],
+        ],
+        'gemini:gemini-omni-1.1-flash-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Stable Gemini Omni 1.1 Flash paid Gemini Developer Interactions API, standard only, not Vertex AI or the older gemini-omni-flash-preview. Text/image/video/audio input shares 1.50/M in the pricing table; the model page lists text/image/video input support, so a rate does not assert additional model capabilities. Exclusive disjoint input modalities and text/video output tokens. The approximately USD 0.10/second 720p equivalent derives from 5,792 video tokens/second and is not an independent duration rate. Generic totals, cache, audio output and duration equivalents remain unpriced. Qualified basis, not an alias.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                'video_input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                'audio_input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '9', 'per' => '1000000'],
+                'video_output_tokens' => ['amount' => '17.50', 'per' => '1000000'],
+            ],
+        ],
+        'gemini:gemini-3.5-transcribe-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini 3.5 Transcribe paid Gemini Developer API unary audio-file transcription, standard only, not Live, batch, flex, priority or Vertex AI. Exclusive audio input and text output tokens. The approximately USD 0.005/min blended rate assumes 25 input audio tokens/second and 175 output text tokens/minute; it is an estimate, not duration billing. No cached-input price, generic totals or audio_seconds rate. Qualified endpoint basis, not an alias.',
+            'rates' => [
+                'audio_input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '12', 'per' => '1000000'],
+            ],
+        ],
+        'gemini:gemini-3.5-transcribe-live-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini 3.5 Transcribe Live paid Gemini Developer Live API bidirectional streaming over WebSockets, standard only, not unary transcription or Vertex AI. Exclusive audio input and text output tokens. The approximately USD 0.009/min blended rate assumes 25 input audio tokens/second and 175 output text tokens/minute; no duration rate is inferred. Cache, generic totals and audio_seconds remain unpriced. Qualified endpoint basis, not an alias.',
+            'rates' => [
+                'audio_input_tokens' => ['amount' => '3.50', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '21', 'per' => '1000000'],
+            ],
+        ],
+        'gemini:gemini-3.5-live-translate-preview-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini 3.5 Live Translate Preview paid Gemini Developer Live API, exact model ID gemini-3.5-live-translate-preview, standard only, not Vertex AI, batch, flex or priority. Exclusive audio input/output tokens. Google explicitly bills token consumption; approximately USD 0.0368/min is an equivalent assuming 25 tokens/second in each direction, not a duration rate. Returned text transcripts have no separately published rate; text_output_tokens stays missing, not inferred free. Cache and generic totals are unpriced. Qualified endpoint basis, not an alias.',
+            'rates' => [
+                'audio_input_tokens' => ['amount' => '3.50', 'per' => '1000000'],
+                'audio_output_tokens' => ['amount' => '21', 'per' => '1000000'],
+            ],
+        ],
+        'gemini:veo-3.1-generate-preview-standard-720p-audio' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Veo 3.1 Generate Preview paid Gemini Developer API, standard variant, 720p video with audio only, not Fast, Lite or Vertex AI. USD 0.40 per generated second. billable_video_seconds is successfully generated output duration; no charge if audio processing prevents generation. Caller owns success/resolution/audio qualification. Input tokens and audio are not extra additive rates. Qualified basis, not an alias or a generic model price.',
+            'rates' => [
+                'billable_video_seconds' => ['amount' => '0.40', 'per' => '1'],
+            ],
+        ],
+        'gemini:veo-3.1-generate-preview-standard-1080p-audio' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Veo 3.1 Generate Preview paid Gemini Developer API, standard variant, 1080p video with audio only, not Fast, Lite or Vertex AI. billable_video_seconds counts successfully generated output at USD 0.40/second. Audio processing failure that prevents generation is not charged. Caller owns success/resolution/audio qualification; no additional input-token or audio fee is inferred. Qualified basis, not an alias.',
+            'rates' => [
+                'billable_video_seconds' => ['amount' => '0.40', 'per' => '1'],
+            ],
+        ],
+        'gemini:veo-3.1-generate-preview-standard-4k-audio' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Veo 3.1 Generate Preview paid Gemini Developer API, standard variant, 4K video with audio only, not Fast, Lite or Vertex AI. billable_video_seconds counts successfully generated output at USD 0.60/second; do not reuse the cheaper 720p/1080p rate. Audio processing failure that prevents generation is not charged. Caller owns success/resolution/audio qualification; no extra token or audio fee is inferred. Qualified basis, not an alias.',
+            'rates' => [
+                'billable_video_seconds' => ['amount' => '0.60', 'per' => '1'],
+            ],
+        ],
+        'gemini:veo-3.1-fast-generate-preview-standard-720p-audio' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Veo 3.1 Fast Generate Preview paid Gemini Developer API, Fast variant, standard service, 720p video with audio only, not the standard or Lite variants or Vertex AI. billable_video_seconds counts successfully generated output at USD 0.10/second. Audio processing failure that prevents generation is not charged. Caller owns success/resolution/audio qualification; no extra token or audio fee is inferred. Qualified basis, not an alias.',
+            'rates' => [
+                'billable_video_seconds' => ['amount' => '0.10', 'per' => '1'],
+            ],
+        ],
+        'gemini:veo-3.1-fast-generate-preview-standard-1080p-audio' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Veo 3.1 Fast Generate Preview paid Gemini Developer API, Fast variant, standard service, 1080p video with audio only, not the standard or Lite variants or Vertex AI. billable_video_seconds counts successfully generated output at USD 0.12/second; no substitution of the 720p rate. Audio processing failure that prevents generation is not charged. Caller owns success/resolution/audio qualification; no extra token or audio fee. Qualified basis, not an alias.',
+            'rates' => [
+                'billable_video_seconds' => ['amount' => '0.12', 'per' => '1'],
+            ],
+        ],
+        'gemini:veo-3.1-fast-generate-preview-standard-4k-audio' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Veo 3.1 Fast Generate Preview paid Gemini Developer API, Fast variant, standard service, 4K video with audio only, not the standard or Lite variants or Vertex AI. billable_video_seconds counts successfully generated output at USD 0.30/second. Audio processing failure that prevents generation is not charged. Caller owns success/resolution/audio qualification; no extra token or audio fee. Qualified basis, not an alias.',
+            'rates' => [
+                'billable_video_seconds' => ['amount' => '0.30', 'per' => '1'],
+            ],
+        ],
+        'gemini:veo-3.1-lite-generate-preview-standard-720p-audio' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Veo 3.1 Lite Generate Preview paid Gemini Developer API, Lite variant, standard service, 720p video with audio only, not the standard or Fast variants or Vertex AI. billable_video_seconds counts successfully generated output at USD 0.05/second. Audio processing failure that prevents generation is not charged. Caller owns success/resolution/audio qualification; no extra token or audio fee. 4K is unsupported. Qualified basis, not an alias.',
+            'rates' => [
+                'billable_video_seconds' => ['amount' => '0.05', 'per' => '1'],
+            ],
+        ],
+        'gemini:veo-3.1-lite-generate-preview-standard-1080p-audio' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Veo 3.1 Lite Generate Preview paid Gemini Developer API, Lite variant, standard service, 1080p video with audio only, not the standard or Fast variants or Vertex AI. billable_video_seconds counts successfully generated output at USD 0.08/second; do not substitute 720p. Audio processing failure that prevents generation is not charged. Caller owns success/resolution/audio qualification; no extra token or audio fee. 4K is unsupported. Qualified basis, not an alias.',
+            'rates' => [
+                'billable_video_seconds' => ['amount' => '0.08', 'per' => '1'],
+            ],
+        ],
+        'gemini:lyria-3.5-standard-full-song' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Lyria 3.5 paid Gemini Developer Interactions API, standard full-song generation only, exact model ID lyria-3.5, not Lyria RealTime, Lyria 3 Clip, batch or Vertex AI. USD 0.08 per full song. billable_songs counts billable full-song generations, not duration, tokens, verses, audio content blocks or text lyrics. https://ai.google.dev/gemini-api/docs/music-generation shows one song with lyrics/audio across multiple response blocks. Caller supplies billed generation count; no undocumented failed-request waiver or block-to-song conversion is inferred. Qualified basis, not an alias.',
+            'rates' => [
+                'billable_songs' => ['amount' => '0.08', 'per' => '1'],
+            ],
+        ],
+        'gemini:gemini-3.8-live-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini 3.8 Live, paid Gemini Developer Live API, standard service tier only, not Vertex AI. Exclusive text/audio/image/video input tokens and text/audio output tokens including thinking in the appropriate modality. Images and video bill at 1/M tokens, not per frame or image. Per-minute equivalents are not additional units. Generic inclusive totals and cache rates remain unpriced. Google Search queries are billable_web_searches after the shared 5,000 monthly free allowance; caller owns allowance accounting. Qualified basis, not an alias.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                'audio_input_tokens' => ['amount' => '3', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                'video_input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '4.50', 'per' => '1000000'],
+                'audio_output_tokens' => ['amount' => '12', 'per' => '1000000'],
+                'billable_web_searches' => ['amount' => '14', 'per' => '1000'],
+            ],
+        ],
+        'gemini:gemini-3.8-live-extended-thinking-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini 3.8 Live Extended Thinking paid Gemini Developer Live API, standard service tier only, not Vertex AI. Exclusive text/audio/image/video input tokens and text/audio output tokens, thinking included in its output modality. Generic inclusive totals, cache rates and duration equivalents remain unpriced. billable_web_searches counts Google Search queries after the shared 5,000 monthly allowance, determined by the caller. Qualified basis, not an alias; same published rates as Gemini 3.8 Live.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                'audio_input_tokens' => ['amount' => '3', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                'video_input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '4.50', 'per' => '1000000'],
+                'audio_output_tokens' => ['amount' => '12', 'per' => '1000000'],
+                'billable_web_searches' => ['amount' => '14', 'per' => '1000'],
+            ],
+        ],
+        'gemini:gemini-nano-banana-2.1-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini Nano Banana 2.1, paid Gemini Developer API, standard only, not batch or Vertex AI. Text/image/video input shares 1.50/M; output text/thinking bills at 7.50/M and output image tokens at 30/M, never image counts. Use exclusive input/output modality quantities with thinking already included in text_output_tokens. The published 4K image equivalent is rounded; use actual tokens, not USD 0.113 per image. Cache and generic inclusive quantities remain unpriced. billable_web_searches counts text/image grounding queries after the shared 5,000 monthly allowance; retrieved grounding context is not billed as input. Qualified basis, not an alias.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                'video_input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                'text_output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                'image_output_tokens' => ['amount' => '30', 'per' => '1000000'],
+                'billable_web_searches' => ['amount' => '14', 'per' => '1000'],
+            ],
+        ],
+        'gemini:gemini-embedding-2-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini Embedding 2 paid Gemini Developer API standard embedding, not batch or Vertex AI. Exclusive text/image/audio/video input tokens. DOCUMENT (PDF) tokens bill at the image rate and must be included in image_input_tokens, not added twice. Per-image, per-second and per-frame equivalents are not additional charges. No generic aggregate input or output rate is published. Qualified basis, not an alias.',
+            'rates' => [
+                'text_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'image_input_tokens' => ['amount' => '0.45', 'per' => '1000000'],
+                'audio_input_tokens' => ['amount' => '6.50', 'per' => '1000000'],
+                'video_input_tokens' => ['amount' => '12', 'per' => '1000000'],
+            ],
+        ],
+        'gemini:gemini-3.8-flash-tts-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini 3.8 Flash TTS paid Gemini Developer API, standard only, not batch, flex, priority or Vertex AI. Exclusive text input and audio output tokens. Generic inclusive counts and duration equivalents remain unpriced. Rates double January 1, 2027; UTC midnight assumed because Google specifies no timezone. Qualified basis, not an alias.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'text_input_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+                        'audio_output_tokens' => ['amount' => '9', 'per' => '1000000'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'text_input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                        'audio_output_tokens' => ['amount' => '18', 'per' => '1000000'],
+                    ],
+                ],
+            ],
+        ],
+        'gemini:gemini-3.8-flash-lite-tts-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini 3.8 Flash-Lite TTS paid Gemini Developer API, standard only, not batch, flex, priority or Vertex AI. Exclusive text input and audio output tokens, not inclusive counts or duration equivalents. Rates double January 1, 2027; UTC midnight assumed because Google specifies no timezone. Qualified basis, not an alias.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'text_input_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+                        'audio_output_tokens' => ['amount' => '6', 'per' => '1000000'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'text_input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                        'audio_output_tokens' => ['amount' => '12', 'per' => '1000000'],
+                    ],
+                ],
+            ],
+        ],
+        'gemini:gemini-robotics-er-2-preview-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini Robotics ER 2 Preview paid Gemini Developer API, standard only, not batch or Vertex AI. One rate covers all input modalities; output includes thinking. Exclusive uncached/cache-read input. Cache storage is million-token-hours, not cache writes. billable_web_searches counts queries after the shared 5,000 monthly allowance; no per-request free deduction. Token and storage rates double January 1, 2027; UTC midnight assumed because Google specifies no timezone. Qualified basis, not an alias.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '5', 'per' => '1000000'],
+                        'cache_storage_token_hours' => ['amount' => '0.50', 'per' => '1000000'],
+                        'billable_web_searches' => ['amount' => '14', 'per' => '1000'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                        'cache_storage_token_hours' => ['amount' => '1', 'per' => '1000000'],
+                        'billable_web_searches' => ['amount' => '14', 'per' => '1000'],
+                    ],
+                ],
+            ],
+        ],
+        'gemini:gemini-robotics-er-2-streaming-preview-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-13. Gemini Robotics ER 2 Streaming Preview paid Gemini Developer Live API, standard only, not Vertex AI. All input modalities share one rate, text output only. No cache rate published for streaming. billable_web_searches counts queries after the shared 5,000 monthly allowance. Token rates double January 1, 2027; UTC midnight assumed because Google specifies no timezone. Qualified endpoint basis, not an alias.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '5', 'per' => '1000000'],
+                        'billable_web_searches' => ['amount' => '14', 'per' => '1000'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                        'billable_web_searches' => ['amount' => '14', 'per' => '1000'],
+                    ],
+                ],
+            ],
+        ],
+        'openrouter:google/gemini-3.8-flash-standard' => [
+            'source' => 'https://openrouter.ai/api/v1/models/google/gemini-3.8-flash-20260902/endpoints',
+            'notes' => 'Checked 2026-10-13. Bound billing basis for OpenRouter Gemini 3.8 Flash canonical google/gemini-3.8-flash-20260902, standard default routing only to google-ai-studio or google-vertex/global. Excludes /flex, /priority, :batch, service_tier, :nitro and :floor. Every standard global endpoint agrees on token rates; no prompt override. Input includes modalities at the same rate, with exclusive cache-read partitions; reasoning is included in output. The catalog cache-write value has unverified storage semantics; no per-token write fee is inferred. Explicit cache storage and server tools remain missing. Google announces a January 1, 2027 price change at https://ai.google.dev/gemini-api/docs/pricing, but future OpenRouter endpoint rates are not published, so this basis expires at 2027-01-01T00:00Z (UTC assumed because Google specifies no timezone) instead of borrowing native future prices. Re-review at the boundary and on endpoint churn. Only snapshot or configured override may price this basis; not an alias.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.075', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+                    ],
+                ],
+            ],
+        ],
         'anthropic:claude-opus-5-5-global-standard' => [
             'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
             'notes' => 'Checked 2026-10-09. Billing basis for claude-opus-5-5, global geography, standard speed, synchronous Messages API only; not a provider alias. All context lengths. Excludes fast mode, US geography (1.1x), batch and server tools. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs.',
@@ -1476,16 +1946,26 @@ return [
         ],
         'cloudflare:@cf/cloudflare/clef' => [
             'source' => 'https://developers.cloudflare.com/workers-ai/platform/pricing/',
-            'notes' => 'Checked 2026-10-09. Workers AI input-only unit price confirmed at https://developers.cloudflare.com/workers-ai/models/clef/. USD 0.24/M input tokens, equivalent to neuron billing. No output rate is published; do not invent a free output-token unit. Retail paid usage before the shared daily free neuron allowance; do not subtract that allowance per request.',
+            'notes' => 'Checked 2026-10-13. Workers AI USD 0.24/M input tokens, equivalent to neuron billing. https://developers.cloudflare.com/workers-ai/models/clef/ explicitly states output tokens are not charged, so the published zero is included. Media is converted to input tokens and included in the billed input total; never add an image count. Retail paid usage before the shared daily free neuron allowance; do not subtract that allowance per request. The documented clef selector resolves source-locally to this canonical ID without rewriting public identity.',
             'rates' => [
                 'input_tokens' => ['amount' => '0.24', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0', 'per' => '1000000'],
             ],
         ],
         'cloudflare:@cf/cloudflare/clef-flash' => [
             'source' => 'https://developers.cloudflare.com/workers-ai/platform/pricing/',
-            'notes' => 'Checked 2026-10-09. Workers AI input-only unit price confirmed at https://developers.cloudflare.com/workers-ai/models/clef-flash/. USD 0.09/M input tokens, equivalent to neuron billing. No output rate is published; do not invent a free output-token unit. Retail paid usage before the shared daily free neuron allowance; do not subtract that allowance per request.',
+            'notes' => 'Checked 2026-10-13. Workers AI USD 0.038/M input tokens, equivalent to neuron billing, confirmed at https://developers.cloudflare.com/workers-ai/models/clef-flash/. The same page explicitly states output tokens are not charged. Media input tokens are included in the billed input total, never billed a second time as image counts. Retail paid usage before the shared daily free neuron allowance; do not subtract that allowance per request. The documented clef-flash selector resolves source-locally to this canonical ID without rewriting public identity.',
             'rates' => [
-                'input_tokens' => ['amount' => '0.09', 'per' => '1000000'],
+                'input_tokens' => ['amount' => '0.038', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0', 'per' => '1000000'],
+            ],
+        ],
+        'cloudflare:@cf/cloudflare/clef-omni' => [
+            'source' => 'https://developers.cloudflare.com/workers-ai/models/clef-omni/',
+            'notes' => 'Checked 2026-10-13. Workers AI Clef Omni USD 0.15/M input tokens, explicitly no output-token charge. Text, image, audio and video are tokenized and included in the billed input total. Published approximate media tokens per minute are not fixed duration rates: audio_seconds and video_seconds stay unpriced. Retail paid usage before the shared daily free neuron allowance; caller owns allowance accounting. The documented clef-omni selector resolves source-locally to this canonical ID, retaining public identity.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0', 'per' => '1000000'],
             ],
         ],
         'anthropic:claude-sonnet-5-global' => [

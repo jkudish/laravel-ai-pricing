@@ -7,6 +7,7 @@ namespace Jkudish\LaravelAiPricing\Sources;
 use DateTimeImmutable;
 use Jkudish\LaravelAiPricing\Contracts\FallbackPolicy;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
+use Jkudish\LaravelAiPricing\Support\PricingJson;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\PriceDefinition;
 use Jkudish\LaravelAiPricing\ValueObjects\Rate;
@@ -18,9 +19,10 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource implemen
     /**
      * Catalog pricing fields and the usage units they price.
      *
-     * OpenRouter's image and audio fields are prices per input token of that
-     * modality, not per image or per second of audio, so they have no unit
-     * here and stay unpriced rather than pricing an image or audio count.
+     * Audio and image_token have documented token units. image/image_output
+     * remain unmapped: PublicPricing labels them USD/image but live catalog
+     * values appear token-scaled. Neither image counts nor token counts can
+     * safely consume these ambiguous fields.
      */
     private const array RATE_MAPPING = [
         'prompt' => 'input_tokens',
@@ -31,6 +33,10 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource implemen
         'request' => 'requests',
         'web_search' => 'web_searches',
         'internal_reasoning' => 'reasoning_tokens',
+        'audio' => 'audio_input_tokens',
+        'audio_output' => 'audio_output_tokens',
+        'input_audio_cache' => 'cached_audio_input_tokens',
+        'image_token' => 'image_input_tokens',
     ];
 
     private const array CACHE_WRITE_FIELDS = ['input_cache_write', 'input_cache_write_1h'];
@@ -46,7 +52,7 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource implemen
     #[Override]
     protected function retrieve(): array
     {
-        $payload = $this->http->acceptJson()->get($this->endpoint)->throw()->json();
+        $payload = PricingJson::decode($this->http->acceptJson()->get($this->endpoint)->throw()->body());
 
         if (! is_array($payload)) {
             throw new UnexpectedValueException('OpenRouter returned an empty or unusable pricing catalog.');
@@ -222,10 +228,24 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource implemen
     private function rates(array $pricing, string $model): array
     {
         $rates = [];
+        $modalityInput = array_intersect(['audio', 'input_audio_cache', 'image', 'image_token'], array_keys($pricing)) !== [];
+        $modalityOutput = array_intersect(['audio_output', 'image_output'], array_keys($pricing)) !== [];
 
         foreach (self::RATE_MAPPING as $field => $unit) {
             if (! array_key_exists($field, $pricing)) {
                 continue;
+            }
+
+            // These are exclusive text prices beside modality-specific prices,
+            // not rates for the inclusive prompt/completion totals. Publishing
+            // both would let the calculator double-bill modality tokens or
+            // price audio/image output at the cheaper text rate.
+            if ($modalityInput && $field === 'prompt') {
+                $unit = 'text_input_tokens';
+            } elseif ($modalityInput && $field === 'input_cache_read') {
+                $unit = 'cached_text_input_tokens';
+            } elseif ($modalityOutput && $field === 'completion') {
+                $unit = 'text_output_tokens';
             }
 
             // OpenRouter lists a Google cache write as a few minutes of cache
@@ -266,6 +286,20 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource implemen
             }
 
             $rates[$unit] = $rate;
+        }
+
+        // text_output_tokens includes reasoning, just like output_tokens.
+        // A distinct reasoning price needs a replacement partition, which
+        // only the generic output family supports. Compare the completed map
+        // so safe text pricing never depends on RATE_MAPPING iteration order.
+        if ($modalityOutput && isset($rates['reasoning_tokens'])) {
+            $textRate = $rates['text_output_tokens'] ?? null;
+
+            if ($textRate !== null && ! $rates['reasoning_tokens']->amount->isEqualTo($textRate->amount)) {
+                unset($rates['text_output_tokens']);
+            }
+
+            unset($rates['reasoning_tokens']);
         }
 
         return $rates;

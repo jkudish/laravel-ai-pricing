@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-13
+
+**Compatibility:** generic token totals for differentiated OpenRouter models may now return partial or unavailable instead of a complete text-rate quote. Supply exclusive modality counts or use provider-reported cost. Pre-upgrade cached catalogs adopt the safer mappings when read; no cache flush is required.
+
+### Added
+
+- Reviewed pricing snapshot v17 adds qualified OpenAI Cyber and Rosalind bases, GPT Image 2.5 Sunburst/Flare endpoint bases, Live 1 session charges, Realtime 2.1/mini and translation, GPT Audio 1.5, and token-billed GPT-4o transcription variants. Live session pricing excludes additional backend usage. Per-minute transcription estimates are not published as exact rates.
+- Qualified Gemini 3.8 Live and extended-thinking, Nano Banana 2.1, Embedding 2, Flash/Flash-Lite TTS, and Robotics ER 2 preview bases. Differentiated prices require exclusive modality token counts. TTS and Robotics bases carry the announced 2027-01-01 rate changes; Google does not state a timezone, so the boundary uses UTC. Gemini search rates named `billable_web_searches` require the caller to account for the applicable free allowance.
+- Qualified Gemini Omni 1.1 Flash token pricing, Gemini 3.5 transcription and live translation, Veo 3.1 variant/resolution-specific billable video duration, and Lyria 3.5 billable songs. Rounded duration equivalents for token-billed models remain unpriced.
+- SubQ's public `subq-snap-preview` Decisions pricing: USD 0.05 per million input tokens and explicitly free output. Early-access `subq-preview` chat remains unavailable because it has no published rate.
+- Cloudflare Clef Omni at USD 0.15 per million input tokens with free output, and documented short selectors for all three Clef models. Source-local aliases preserve the requested identity.
+- A qualified OpenRouter Gemini 3.8 Flash standard basis using reviewed global standard endpoint rates. It excludes flex, priority, and ambiguous cache writes and expires on 2027-01-01; future OpenRouter prices require a separate review.
+- OpenRouter's documented audio-token pricing fields and explicit image-token field use exclusive modality units. These prices require a complete disjoint breakdown rather than inclusive text-plus-modality totals.
+
+### Fixed
+
+- Portkey catalog responses containing numeric fractional prices no longer fail a fresh lookup or sync. The HTTP decoder preserves original decimal number text before creating rates; it never converts binary floats into authoritative prices. Invalid JSON and invalid monetary values remain rejected.
+- Clef-flash input pricing is USD 0.038 per million tokens, replacing USD 0.09. Clef remains USD 0.24/M. Both now publish the documented free-output rate, so positive output counts no longer leave a partial quote.
+
+### Changed
+
+- Differentiated modality prices use exclusive `text_*`, `image_*`, `audio_*`, `video_*`, and cached-modality token units. Generic inclusive token totals without a verified breakdown stay partial or unavailable rather than receiving a cheaper text rate. Existing Portkey `input_audio_tokens` and `output_audio_tokens` units remain unchanged.
+- Coverage documentation distinguishes published pricing, qualified billing bases, and unavailable rates. OpenRouter pricing overrides still refuse unsafe headline/fallback prices; ambiguous `image`/`image_output` units, router sentinel prices, unverified transcription billing, and unpublished SubQ chat pricing remain unpriced. Existing Claude pricing is unchanged; Jev's latest/preview aliases retain USD 0.042/M input and free output.
+
 ## [0.3.1] - 2026-10-11
 
 ### Fixed
@@ -169,7 +193,9 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.3...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.0...main
+[0.4.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.1...v0.2.2
