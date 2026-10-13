@@ -8,6 +8,7 @@ use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Jkudish\LaravelAiPricing\Adapters\NormalizedObservationAdapter;
 use Jkudish\LaravelAiPricing\CostCalculator;
 use Jkudish\LaravelAiPricing\Enums\CostCompleteness;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
@@ -327,7 +328,7 @@ it('preserves OpenRouter LKG when refresh is unusable', function (mixed $respons
     'NaN-like decimal' => [['data' => [['id' => 'bad/model', 'pricing' => ['prompt' => 'NaN']]]]],
     'infinite-like decimal' => [['data' => [['id' => 'bad/model', 'pricing' => ['prompt' => 'INF']]]]],
     'negative decimal' => [['data' => [['id' => 'bad/model', 'pricing' => ['prompt' => '-0.1']]]]],
-    'unsafe float' => [['data' => [['id' => 'bad/model', 'pricing' => ['prompt' => 0.1]]]]],
+    'boolean price' => [['data' => [['id' => 'bad/model', 'pricing' => ['prompt' => true]]]]],
 ]);
 
 it('preserves Portkey LKG when refresh is unusable', function (array $response): void {
@@ -349,7 +350,7 @@ it('preserves Portkey LKG when refresh is unusable', function (array $response):
     'NaN-like decimal' => [['claude' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => 'NaN']]]]]],
     'infinite-like decimal' => [['claude' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => 'INF']]]]]],
     'negative decimal' => [['claude' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => '-0.1']]]]]],
-    'unsafe float' => [['claude' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => 0.1]]]]]],
+    'boolean price' => [['claude' => ['pricing_config' => ['pay_as_you_go' => ['request_token' => ['price' => true]]]]]],
     'malformed additional units' => [['claude' => ['pricing_config' => ['pay_as_you_go' => [
         'request_token' => ['price' => '0.1'],
         'additional_units' => ['web_search' => ['price' => []]],
@@ -609,15 +610,14 @@ it('does not price image or audio counts at OpenRouter per-token modality rates'
     $definition = openRouterSource()->find(new ModelIdentity('openrouter', 'google/gemini-test'));
     assert($definition !== null);
     $quote = (new CostCalculator)->calculate(new Usage([
-        'input_tokens' => 1_000,
+        'text_input_tokens' => 1_000,
         'images' => 2,
         'audio_seconds' => 30,
     ]), $definition);
 
-    // 1,000 x 0.00000075 = 0.00075. The image and audio fields price tokens of
-    // that modality, so two images and 30 seconds of audio stay missing rather
-    // than costing 2 x 0.00000075 and 30 x 0.0000015.
-    expect(array_keys($definition->rates))->toBe(['input_tokens', 'output_tokens'])
+    // Text tokens are exclusive. Audio seconds cannot consume an audio token
+    // rate; the image price's unit is ambiguous and remains unmapped.
+    expect(array_keys($definition->rates))->toBe(['text_input_tokens', 'output_tokens', 'audio_input_tokens'])
         ->and((string) $quote->cost?->amount)->toBe('0.00075')
         ->and($quote->completeness)->toBe(CostCompleteness::Partial)
         ->and($quote->missingUnits)->toBe(['images', 'audio_seconds']);
@@ -746,4 +746,125 @@ it('lets the fallback catalog price an OpenRouter model when no refusal is known
     // Portkey cents per token: 1,000 x 0.0002 / 100 = 0.002.
     expect($quote->amount?->isEqualTo('0.002'))->toBeTrue()
         ->and($quote->source)->toBe(PricingSource::Portkey);
+});
+
+it('preserves raw Portkey decimal lexemes and isolates malformed records', function (): void {
+    Http::fake(['https://portkey.test/*' => Http::response(<<<'JSON'
+{"broken":{"pricing_config":{"pay_as_you_go":{"request_token":{"price":-0.1}}}},"gpt-4o":{"note":"escaped \"price\": 9.99 and \\ slash","pricing_config":{"currency":"USD","pay_as_you_go":{"request_token":{"price":0.00025},"response_token":{"price":1.234567890123456789e-3},"cache_read_input_token":{"price":1.25E-4}}}},"after":{"pricing_config":{"pay_as_you_go":{"request_token":{"price":0.00001}}}}}
+JSON)]);
+
+    $source = portkeySource(providers: ['openai']);
+    $definition = $source->find(new ModelIdentity('openai', 'gpt-4o'));
+
+    expect((string) $definition?->rates['input_tokens']->amount)->toBe('0.0000025')
+        ->and((string) $definition?->rates['output_tokens']->amount)->toBe('0.00001234567890123456789')
+        ->and((string) $definition?->rates['cached_input_tokens']->amount)->toBe('0.00000125')
+        ->and($source->find(new ModelIdentity('openai', 'broken')))->toBeNull()
+        ->and($source->find(new ModelIdentity('openai', 'after')))->not->toBeNull()
+        ->and($source->sync())->toBe(2);
+});
+
+it('retains exact Portkey LKG after invalid raw JSON or prices', function (string $raw): void {
+    Http::fake(['https://portkey.test/*' => Http::sequence()
+        ->push('{"good":{"pricing_config":{"pay_as_you_go":{"request_token":{"price":0.00025}}}}}')
+        ->push($raw)]);
+    $source = portkeySource(providers: ['openai']);
+    $source->sync();
+
+    expect(fn () => $source->sync())->toThrow(UnexpectedValueException::class);
+    $definition = portkeySource(offline: true)->find(new ModelIdentity('openai', 'good'));
+    expect((string) $definition?->rates['input_tokens']->amount)->toBe('0.0000025');
+})->with([
+    'leading zero' => ['{"bad":{"pricing_config":{"pay_as_you_go":{"request_token":{"price":01}}}}}'],
+    'trailing dot' => ['{"bad":{"pricing_config":{"pay_as_you_go":{"request_token":{"price":1.}}}}}'],
+    'negative' => ['{"bad":{"pricing_config":{"pay_as_you_go":{"request_token":{"price":-1e-6}}}}}'],
+    'null' => ['{"bad":{"pricing_config":{"pay_as_you_go":{"request_token":{"price":null}}}}}'],
+    'boolean' => ['{"bad":{"pricing_config":{"pay_as_you_go":{"request_token":{"price":true}}}}}'],
+    'array' => ['{"bad":{"pricing_config":{"pay_as_you_go":{"request_token":{"price":[]}}}}}'],
+]);
+
+it('preserves raw OpenRouter decimal lexemes without changing escaped model IDs', function (): void {
+    Http::fake(['https://openrouter.test/*' => Http::response(<<<'JSON'
+{"data":[{"id":"test\/escaped\"model","pricing":{"prompt":1.234567890123456789e-6,"completion":0.000003}}]}
+JSON)]);
+    $definition = openRouterSource()->find(new ModelIdentity('openrouter', 'test/escaped"model'));
+    expect((string) $definition?->rates['input_tokens']->amount)->toBe('0.000001234567890123456789');
+});
+
+it('prices only exclusive OpenRouter modality counts without billing inclusive totals twice', function (array $units, string $cost, array $missing): void {
+    Http::fake(['https://openrouter.test/*' => Http::response(['data' => [[
+        'id' => 'test/multimodal',
+        'pricing' => [
+            'prompt' => '0.000002', 'completion' => '0.000007',
+            'audio' => '0.000031', 'audio_output' => '0.000061',
+            'input_cache_read' => '0.0000005', 'input_audio_cache' => '0.000004',
+            'image_token' => '0.000009', 'image_output' => '0.00003',
+        ],
+    ]]])]);
+    $definition = openRouterSource()->find(new ModelIdentity('openrouter', 'test/multimodal'));
+    assert($definition !== null);
+    $observation = (new NormalizedObservationAdapter)->adapt([
+        'provider' => 'openrouter', 'model' => 'test/multimodal', 'usage' => $units,
+    ]);
+    $quote = (new CostCalculator)->calculate($observation->usage, $definition);
+
+    expect($definition->rates)->not->toHaveKeys(['input_tokens', 'output_tokens', 'cached_input_tokens', 'image_output_tokens'])
+        ->and($quote->amount?->isEqualTo($cost))->toBeTrue()
+        ->and($quote->missingUnits)->toBe($missing)
+        ->and($quote->completeness)->toBe($missing === [] ? CostCompleteness::Complete : CostCompleteness::Partial);
+})->with([
+    // 17*2 + 5*31 + 3*9 + 11*7 + 7*61 + 13*0.5 + 2*4 = 734.5 microdollars.
+    'asymmetric mixed and cached exclusive counts' => [[
+        'text_input_tokens' => 17, 'audio_input_tokens' => 5, 'image_input_tokens' => 3,
+        'text_output_tokens' => 11, 'audio_output_tokens' => 7,
+        'cached_text_input_tokens' => 13, 'cached_audio_input_tokens' => 2,
+    ], '0.0007345', []],
+    'inclusive totals alongside exclusive counts are missing not additive' => [[
+        'input_tokens' => 25, 'output_tokens' => 18, 'cached_input_tokens' => 15,
+        'text_input_tokens' => 17, 'audio_input_tokens' => 5, 'image_input_tokens' => 3,
+        'text_output_tokens' => 11, 'audio_output_tokens' => 7,
+        'cached_text_input_tokens' => 13, 'cached_audio_input_tokens' => 2,
+    ], '0.0007345', ['input_tokens', 'output_tokens', 'cached_input_tokens']],
+    'modality-only usage never invents text' => [[
+        'audio_input_tokens' => 5, 'audio_output_tokens' => 7, 'cached_audio_input_tokens' => 2,
+    ], '0.00059', []],
+    'unknown modality units stay missing' => [[
+        'text_input_tokens' => 17, 'image_output_tokens' => 3, 'video_input_tokens' => 5,
+    ], '0.000034', ['image_output_tokens', 'video_input_tokens']],
+]);
+
+it('does not infer exclusive text from an incomplete OpenRouter usage breakdown', function (): void {
+    Http::fake(['https://openrouter.test/*' => Http::response(['data' => [[
+        'id' => 'test/audio',
+        'pricing' => ['prompt' => '0.0000025', 'completion' => '0.00001', 'audio' => '0.000032', 'audio_output' => '0.000064'],
+    ]]])]);
+    $definition = openRouterSource()->find(new ModelIdentity('openrouter', 'test/audio'));
+    assert($definition !== null);
+    $observation = (new NormalizedObservationAdapter)->adapt([
+        'provider' => 'openrouter', 'model' => 'test/audio',
+        'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 30,
+            'prompt_tokens_details' => ['audio_tokens' => 19],
+            'completion_tokens_details' => ['audio_tokens' => 7]],
+    ]);
+    $quote = (new CostCalculator)->calculate($observation->usage, $definition);
+
+    expect($quote->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($quote->amount)->toBeNull()
+        ->and($quote->missingUnits)->toBe(['input_tokens', 'output_tokens']);
+});
+
+it('does not publish an inclusive text output rate beside a distinct modality reasoning price', function (): void {
+    Http::fake(['https://openrouter.test/*' => Http::response(['data' => [[
+        'id' => 'test/audio-reasoning',
+        'pricing' => ['completion' => '0.000007', 'audio_output' => '0.000061', 'internal_reasoning' => '0.000013'],
+    ]]])]);
+    $definition = openRouterSource()->find(new ModelIdentity('openrouter', 'test/audio-reasoning'));
+    assert($definition !== null);
+    $quote = (new CostCalculator)->calculate(new Usage(['text_output_tokens' => 11, 'audio_output_tokens' => 7]), $definition);
+
+    // The text count may contain differently priced reasoning. Without its
+    // partition we can safely price only 7 audio tokens at 61 microdollars.
+    expect($quote->amount?->isEqualTo('0.000427'))->toBeTrue()
+        ->and($quote->completeness)->toBe(CostCompleteness::Partial)
+        ->and($quote->missingUnits)->toBe(['text_output_tokens']);
 });
