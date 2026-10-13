@@ -868,3 +868,31 @@ it('does not publish an inclusive text output rate beside a distinct modality re
         ->and($quote->completeness)->toBe(CostCompleteness::Partial)
         ->and($quote->missingUnits)->toBe(['text_output_tokens']);
 });
+
+it('rehydrates pre-upgrade OpenRouter cached records with safe modality qualifications', function (bool $offline): void {
+    // v0.3.1 stored raw model records, not rates. Keep its v2 cache envelope
+    // readable, but never reuse its former generic modality interpretation.
+    $key = 'ai-pricing:catalog:openrouter:v2:'.hash('sha256', 'https://openrouter.test/api/v1/models');
+    Cache::forever($key.($offline ? ':lkg' : ''), [
+        'retrieved_at' => '2026-10-12T12:00:00+00:00',
+        'source_reference' => 'https://openrouter.test/api/v1/models',
+        'catalog' => [[
+            'id' => 'openai/gpt-audio',
+            'pricing' => ['prompt' => '0.0000025', 'completion' => '0.00001', 'audio' => '0.000032', 'audio_output' => '0.000064'],
+        ]],
+    ]);
+    $definition = openRouterSource(offline: $offline)->find(new ModelIdentity('openrouter', 'openai/gpt-audio'));
+    assert($definition !== null);
+    $calculator = new CostCalculator;
+    $generic = $calculator->calculate(Usage::tokens(22, 18), $definition);
+    $exclusive = $calculator->calculate(new Usage([
+        'text_input_tokens' => 17, 'audio_input_tokens' => 5,
+        'text_output_tokens' => 11, 'audio_output_tokens' => 7,
+    ]), $definition);
+
+    expect($generic->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($exclusive->completeness)->toBe(CostCompleteness::Complete)
+        ->and($exclusive->amount?->isEqualTo('0.0007605'))->toBeTrue()
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-12T12:00:00+00:00');
+    Http::assertNothingSent();
+})->with([false, true]);
