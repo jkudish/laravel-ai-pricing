@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-13
+
 **Compatibility:** generic token totals for differentiated OpenRouter models may now return partial or unavailable instead of a complete text-rate quote. Supply exclusive modality counts or use provider-reported cost. Pre-upgrade cached catalogs adopt the safer mappings when read; no cache flush is required.
 
 ### Added
@@ -191,7 +193,8 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.1...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.0...main
+[0.4.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.2...v0.2.3
