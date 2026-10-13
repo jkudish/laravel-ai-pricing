@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Differentiated modality prices use exclusive `text_*`, `image_*`, `audio_*`, `video_*`, and cached-modality token units. Generic inclusive token totals without a verified breakdown stay partial or unavailable rather than receiving a cheaper text rate. Existing Portkey `input_audio_tokens` and `output_audio_tokens` units remain unchanged.
-- Coverage documentation distinguishes published pricing, qualified billing bases, and unavailable rates. OpenRouter pricing overrides still refuse unsafe headline/fallback prices; ambiguous `image`/`image_output` units, router sentinel prices, unverified transcription billing, and unpublished SubQ chat pricing remain unpriced. Current Claude and TypeSafe Jev prices were rechecked; Jev's latest/preview aliases retain USD 0.042/M input and free output.
+- Coverage documentation distinguishes published pricing, qualified billing bases, and unavailable rates. OpenRouter pricing overrides still refuse unsafe headline/fallback prices; ambiguous `image`/`image_output` units, router sentinel prices, unverified transcription billing, and unpublished SubQ chat pricing remain unpriced. Existing Claude pricing is unchanged; Jev's latest/preview aliases retain USD 0.042/M input and free output.
 
 ## [0.3.1] - 2026-10-11
 

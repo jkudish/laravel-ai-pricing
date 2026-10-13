@@ -285,21 +285,21 @@ final class OpenRouterPricingSource extends AbstractRemotePricingSource implemen
                 continue;
             }
 
-            // text_output_tokens includes reasoning, just like output_tokens.
-            // A distinct reasoning price needs a replacement partition, which
-            // only the generic output family supports. Do not publish an
-            // inclusive text price that would silently miss that distinction.
-            if ($field === 'internal_reasoning' && $modalityOutput) {
-                $textRate = $rates['text_output_tokens'] ?? null;
+            $rates[$unit] = $rate;
+        }
 
-                if ($textRate !== null && ! $rate->amount->isEqualTo($textRate->amount)) {
-                    unset($rates['text_output_tokens']);
-                }
+        // text_output_tokens includes reasoning, just like output_tokens.
+        // A distinct reasoning price needs a replacement partition, which
+        // only the generic output family supports. Compare the completed map
+        // so safe text pricing never depends on RATE_MAPPING iteration order.
+        if ($modalityOutput && isset($rates['reasoning_tokens'])) {
+            $textRate = $rates['text_output_tokens'] ?? null;
 
-                continue;
+            if ($textRate !== null && ! $rates['reasoning_tokens']->amount->isEqualTo($textRate->amount)) {
+                unset($rates['text_output_tokens']);
             }
 
-            $rates[$unit] = $rate;
+            unset($rates['reasoning_tokens']);
         }
 
         return $rates;

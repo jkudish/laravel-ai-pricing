@@ -20,7 +20,7 @@ final class PricingJson
         // backslashes and numeric text inside strings. No number passes through
         // a binary float, including exponent notation and oversized integers.
         $exact = preg_replace_callback(
-            '/"(?:[^"\\\\]|\\\\.)*"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/s',
+            '/"[^"\\\\]*+(?:\\\\.[^"\\\\]*+)*+"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/',
             static fn (array $match): string => str_starts_with($match[0], '"') ? $match[0] : '"'.$match[0].'"',
             $json,
         );

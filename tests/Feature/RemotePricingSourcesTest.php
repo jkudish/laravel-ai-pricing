@@ -791,6 +791,20 @@ JSON)]);
     expect((string) $definition?->rates['input_tokens']->amount)->toBe('0.000001234567890123456789');
 });
 
+it('prices catalogs with long escaped metadata strings', function (): void {
+    $description = json_encode(str_repeat('metadata "0.001" \\ with escaped quotes ', 1_000), JSON_THROW_ON_ERROR);
+    Http::fake(['https://openrouter.test/*' => Http::response(
+        '{"data":[{"id":"test/long-metadata","description":'.$description.',"pricing":{"prompt":0.0000025,"completion":0.00001}}]}',
+    )]);
+    $definition = openRouterSource()->find(new ModelIdentity('openrouter', 'test/long-metadata'));
+
+    expect($definition)->not->toBeNull();
+    $quote = (new CostCalculator)->calculate(Usage::tokens(1_000, 200), $definition);
+
+    expect($quote->amount?->isEqualTo('0.0045'))->toBeTrue()
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete);
+});
+
 it('prices only exclusive OpenRouter modality counts without billing inclusive totals twice', function (array $units, string $cost, array $missing): void {
     Http::fake(['https://openrouter.test/*' => Http::response(['data' => [[
         'id' => 'test/multimodal',
