@@ -7,9 +7,209 @@ use Jkudish\LaravelAiPricing\CostCalculator;
 use Jkudish\LaravelAiPricing\Enums\CostCompleteness;
 use Jkudish\LaravelAiPricing\Enums\PricingSource;
 use Jkudish\LaravelAiPricing\Facades\AiPricing;
+use Jkudish\LaravelAiPricing\ResponseCostResolver;
 use Jkudish\LaravelAiPricing\Sources\PackagePricingSource;
 use Jkudish\LaravelAiPricing\ValueObjects\ModelIdentity;
 use Jkudish\LaravelAiPricing\ValueObjects\Usage;
+
+it('quotes newly reviewed families exactly and keeps undeclared units missing', function (string $provider, string $model, Usage $usage, string $expected): void {
+    $definition = packagePricingSource()->find(new ModelIdentity($provider, $model));
+    expect($definition)->not->toBeNull();
+    assert($definition !== null);
+
+    $quote = (new CostCalculator)->calculate($usage, $definition, new DateTimeImmutable('2026-10-13T00:00:00Z'));
+    $partial = (new CostCalculator)->calculate(new Usage([...$usage->toArray(), 'unknown_billed_unit' => 1]), $definition, new DateTimeImmutable('2026-10-13T00:00:00Z'));
+
+    expect($quote->cost?->amount->isEqualTo($expected))->toBeTrue()
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($partial->completeness)->toBe(CostCompleteness::Partial)
+        ->and($partial->missingUnits)->toBe(['unknown_billed_unit'])
+        ->and($partial->cost?->amount->isEqualTo($expected))->toBeTrue()
+        ->and($definition->sourceReference)->toStartWith('https://');
+})->with([
+    'SubQ Snap' => ['subq', 'subq-snap-preview', new Usage(['input_tokens' => 12345, 'output_tokens' => 777]), '0.00061725'],
+    'Clef' => ['cloudflare', '@cf/cloudflare/clef', new Usage(['input_tokens' => 12345, 'output_tokens' => 777]), '0.0029628'],
+    'Clef Flash selector' => ['cloudflare', 'clef-flash', new Usage(['input_tokens' => 12345, 'output_tokens' => 777]), '0.00046911'],
+    'Clef Omni selector' => ['cloudflare', 'clef-omni', new Usage(['input_tokens' => 12345, 'output_tokens' => 777]), '0.00185175'],
+    'Cyber short' => ['openai', 'gpt-5.6-cyber-standard-short', new Usage(['input_tokens' => 2000, 'cached_input_tokens' => 3000, 'cache_write_input_tokens' => 4000, 'output_tokens' => 5000]), '0.46625'],
+    'Cyber total prompt at the short boundary' => ['openai', 'gpt-5.6-cyber-standard-short', new Usage(['input_tokens' => 200000, 'cached_input_tokens' => 32000, 'cache_write_input_tokens' => 40000, 'output_tokens' => 1000]), '3.24'],
+    'Cyber legacy' => ['openai', 'gpt-5.5-cyber-standard', new Usage(['input_tokens' => 2000, 'cached_input_tokens' => 3000, 'output_tokens' => 5000]), '0.40375'],
+    'Rosalind research' => ['openai', 'gpt-rosalind-research-standard', new Usage(['input_tokens' => 2000, 'cached_input_tokens' => 3000, 'output_tokens' => 5000]), '0.1365'],
+    'Rosalind discovery' => ['openai', 'gpt-rosalind-discovery-standard', new Usage(['input_tokens' => 2000, 'cached_input_tokens' => 3000, 'output_tokens' => 5000]), '0.1365'],
+    'Sunburst Responses' => ['openai', 'gpt-image-2.5-sunburst-standard-responses', new Usage(['text_input_tokens' => 2000, 'cached_text_input_tokens' => 3000, 'image_input_tokens' => 4000, 'cached_image_input_tokens' => 5000, 'image_output_tokens' => 6000]), '0.23575'],
+    'Flare Responses' => ['openai', 'gpt-image-2.5-flare-standard-responses', new Usage(['text_input_tokens' => 2000, 'cached_text_input_tokens' => 3000, 'image_input_tokens' => 4000, 'cached_image_input_tokens' => 5000, 'image_output_tokens' => 6000]), '0.23575'],
+    'Sunburst Images' => ['openai', 'gpt-image-2.5-sunburst-standard-images', new Usage(['text_input_tokens' => 2000, 'image_input_tokens' => 4000, 'image_output_tokens' => 6000]), '0.222'],
+    'Flare Images' => ['openai', 'gpt-image-2.5-flare-standard-images', new Usage(['text_input_tokens' => 2000, 'image_input_tokens' => 4000, 'image_output_tokens' => 6000]), '0.222'],
+    'Live seconds without minute rounding' => ['openai', 'gpt-live-1-session', new Usage(['voice_session_seconds' => 63]), '0.0525'],
+    'Realtime 2.1' => ['openai', 'gpt-realtime-2.1-standard', new Usage(['text_input_tokens' => 2000, 'text_output_tokens' => 3000, 'audio_input_tokens' => 4000, 'audio_output_tokens' => 5000, 'image_input_tokens' => 6000, 'cached_audio_input_tokens' => 7000, 'cached_text_input_tokens' => 11000, 'cached_image_input_tokens' => 13000]), '0.5717'],
+    'Realtime 2.1 Mini' => ['openai', 'gpt-realtime-2.1-mini-standard', new Usage(['text_input_tokens' => 2000, 'text_output_tokens' => 3000, 'audio_input_tokens' => 4000, 'audio_output_tokens' => 5000, 'image_input_tokens' => 6000, 'cached_audio_input_tokens' => 7000, 'cached_text_input_tokens' => 11000, 'cached_image_input_tokens' => 13000]), '0.157'],
+    'Realtime Translate duration' => ['openai', 'gpt-realtime-translate-standard', new Usage(['audio_seconds' => 63]), '0.0357'],
+    '4o Transcribe tokens not minute estimates' => ['openai', 'gpt-4o-transcribe-standard', new Usage(['audio_input_tokens' => 2000, 'text_output_tokens' => 3000]), '0.035'],
+    '4o Mini Transcribe' => ['openai', 'gpt-4o-mini-transcribe-standard', new Usage(['audio_input_tokens' => 2000, 'text_output_tokens' => 3000]), '0.0175'],
+    '4o Transcribe Diarize' => ['openai', 'gpt-4o-transcribe-diarize-standard', new Usage(['audio_input_tokens' => 2000, 'text_output_tokens' => 3000]), '0.035'],
+    'Gemini Live' => ['gemini', 'gemini-3.8-live-standard', new Usage(['text_input_tokens' => 2000, 'text_output_tokens' => 3000, 'audio_input_tokens' => 4000, 'audio_output_tokens' => 5000, 'image_input_tokens' => 6000, 'video_input_tokens' => 7000, 'billable_web_searches' => 2]), '0.128'],
+    'Gemini Live extended thinking' => ['gemini', 'gemini-3.8-live-extended-thinking-standard', new Usage(['text_input_tokens' => 2000, 'text_output_tokens' => 3000, 'audio_input_tokens' => 4000, 'audio_output_tokens' => 5000, 'image_input_tokens' => 6000, 'video_input_tokens' => 7000]), '0.1'],
+    'Nano Banana image tokens' => ['gemini', 'gemini-nano-banana-2.1-standard', new Usage(['text_input_tokens' => 2000, 'image_input_tokens' => 3000, 'video_input_tokens' => 4000, 'text_output_tokens' => 3000, 'image_output_tokens' => 1120, 'billable_web_searches' => 2]), '0.0976'],
+    'Embedding 2 modalities' => ['gemini', 'gemini-embedding-2-standard', new Usage(['text_input_tokens' => 2000, 'image_input_tokens' => 3000, 'audio_input_tokens' => 4000, 'video_input_tokens' => 5000]), '0.08775'],
+    'Audio 1.5 Chat Completions' => ['openai', 'gpt-audio-1.5-standard-chat', new Usage(['text_input_tokens' => 2000, 'audio_input_tokens' => 3000, 'text_output_tokens' => 4000, 'audio_output_tokens' => 5000]), '0.461'],
+    'Omni 1.1 Flash video tokens' => ['gemini', 'gemini-omni-1.1-flash-standard', new Usage(['text_input_tokens' => 2000, 'image_input_tokens' => 3000, 'audio_input_tokens' => 4000, 'video_input_tokens' => 5000, 'text_output_tokens' => 6000, 'video_output_tokens' => 7000]), '0.1975'],
+    '3.5 Transcribe' => ['gemini', 'gemini-3.5-transcribe-standard', new Usage(['audio_input_tokens' => 2000, 'text_output_tokens' => 3000]), '0.04'],
+    '3.5 Transcribe Live' => ['gemini', 'gemini-3.5-transcribe-live-standard', new Usage(['audio_input_tokens' => 2000, 'text_output_tokens' => 3000]), '0.07'],
+    '3.5 Live Translate' => ['gemini', 'gemini-3.5-live-translate-preview-standard', new Usage(['audio_input_tokens' => 3000, 'audio_output_tokens' => 2000]), '0.0525'],
+    'Veo 3.1 720p with audio' => ['gemini', 'veo-3.1-generate-preview-standard-720p-audio', new Usage(['billable_video_seconds' => 8]), '3.20'],
+    'Veo 3.1 1080p with audio' => ['gemini', 'veo-3.1-generate-preview-standard-1080p-audio', new Usage(['billable_video_seconds' => 8]), '3.20'],
+    'Veo 3.1 4K with audio' => ['gemini', 'veo-3.1-generate-preview-standard-4k-audio', new Usage(['billable_video_seconds' => 8]), '4.80'],
+    'Veo 3.1 Fast 720p with audio' => ['gemini', 'veo-3.1-fast-generate-preview-standard-720p-audio', new Usage(['billable_video_seconds' => 8]), '0.80'],
+    'Veo 3.1 Fast 1080p with audio' => ['gemini', 'veo-3.1-fast-generate-preview-standard-1080p-audio', new Usage(['billable_video_seconds' => 8]), '0.96'],
+    'Veo 3.1 Fast 4K with audio' => ['gemini', 'veo-3.1-fast-generate-preview-standard-4k-audio', new Usage(['billable_video_seconds' => 8]), '2.40'],
+    'Veo 3.1 Lite 720p with audio' => ['gemini', 'veo-3.1-lite-generate-preview-standard-720p-audio', new Usage(['billable_video_seconds' => 8]), '0.40'],
+    'Veo 3.1 Lite 1080p with audio' => ['gemini', 'veo-3.1-lite-generate-preview-standard-1080p-audio', new Usage(['billable_video_seconds' => 8]), '0.64'],
+    'Lyria 3.5 full songs not audio blocks' => ['gemini', 'lyria-3.5-standard-full-song', new Usage(['billable_songs' => 3]), '0.24'],
+]);
+
+it('does not guess rates for aggregate modality counts or duration estimates', function (string $provider, string $model, string $unit): void {
+    $definition = packagePricingSource()->find(new ModelIdentity($provider, $model));
+    expect($definition)->not->toBeNull();
+    assert($definition !== null);
+    $quote = (new CostCalculator)->calculate(new Usage([$unit => 17]), $definition);
+
+    expect($quote->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($quote->cost)->toBeNull()
+        ->and($quote->missingUnits)->toBe([$unit]);
+})->with([
+    ['openai', 'gpt-realtime-2.1-standard', 'input_tokens'],
+    ['openai', 'gpt-image-2.5-sunburst-standard-responses', 'images'],
+    ['openai', 'gpt-image-2.5-flare-standard-images', 'cached_image_input_tokens'],
+    ['openai', 'gpt-live-1-session', 'backend_input_tokens'],
+    ['openai', 'gpt-4o-transcribe-standard', 'audio_seconds'],
+    ['cloudflare', '@cf/cloudflare/clef-omni', 'audio_seconds'],
+    ['gemini', 'gemini-3.8-live-standard', 'output_tokens'],
+    ['gemini', 'gemini-nano-banana-2.1-standard', 'images'],
+    ['gemini', 'gemini-embedding-2-standard', 'input_tokens'],
+    ['openai', 'gpt-audio-1.5-standard-chat', 'cached_audio_input_tokens'],
+    ['gemini', 'gemini-omni-1.1-flash-standard', 'video_seconds'],
+    ['gemini', 'gemini-3.5-transcribe-standard', 'audio_seconds'],
+    ['gemini', 'gemini-3.5-transcribe-live-standard', 'audio_seconds'],
+    ['gemini', 'gemini-3.5-live-translate-preview-standard', 'audio_seconds'],
+    ['gemini', 'gemini-3.5-live-translate-preview-standard', 'text_output_tokens'],
+    ['gemini', 'veo-3.1-generate-preview-standard-4k-audio', 'video_output_tokens'],
+    ['gemini', 'lyria-3.5-standard-full-song', 'audio_seconds'],
+]);
+
+it('prices announced native changes at both UTC boundaries and reserves the higher overlapping rate', function (string $provider, string $model, Usage $usage, string $before, string $after): void {
+    $resolver = app(ResponseCostResolver::class);
+    $lastSecond = $resolver->quote($provider, $model, $usage, at: new DateTimeImmutable('2026-12-31T23:59:59Z'));
+    $firstInstant = $resolver->quote($provider, $model, $usage, at: new DateTimeImmutable('2027-01-01T00:00:00Z'));
+    $reservation = $resolver->quote($provider, $model, $usage, at: new DateTimeImmutable('2026-12-31T23:59:59Z'), until: new DateTimeImmutable('2027-01-01T00:00:01Z'));
+
+    expect($lastSecond->amount?->isEqualTo($before))->toBeTrue()
+        ->and($firstInstant->amount?->isEqualTo($after))->toBeTrue()
+        ->and($reservation->amount?->isEqualTo($after))->toBeTrue()
+        ->and($reservation->completeness)->toBe(CostCompleteness::Complete)
+        ->and($reservation->provenance?->toArray()['rate_windows'] ?? [])->toHaveCount(2);
+})->with([
+    'Flash TTS' => ['gemini', 'gemini-3.8-flash-tts-standard', new Usage(['text_input_tokens' => 2000, 'audio_output_tokens' => 3000]), '0.028', '0.056'],
+    'Flash Lite TTS' => ['gemini', 'gemini-3.8-flash-lite-tts-standard', new Usage(['text_input_tokens' => 2000, 'audio_output_tokens' => 3000]), '0.019', '0.038'],
+    'Robotics ER2 including storage not writes' => ['gemini', 'gemini-robotics-er-2-preview-standard', new Usage(['input_tokens' => 2000, 'cached_input_tokens' => 3000, 'output_tokens' => 4000, 'cache_storage_token_hours' => 5000, 'billable_web_searches' => 2]), '0.0528', '0.0776'],
+    'Robotics ER2 streaming' => ['gemini', 'gemini-robotics-er-2-streaming-preview-standard', new Usage(['input_tokens' => 2000, 'output_tokens' => 4000, 'billable_web_searches' => 2]), '0.05', '0.072'],
+]);
+
+it('expires the reviewed OpenRouter basis instead of borrowing future native prices', function (): void {
+    $usage = new Usage(['input_tokens' => 2000, 'cached_input_tokens' => 3000, 'output_tokens' => 4000]);
+    $model = 'google/gemini-3.8-flash-standard';
+    $resolver = app(ResponseCostResolver::class);
+    $before = $resolver->quote('openrouter', $model, $usage, at: new DateTimeImmutable('2026-12-31T23:59:59Z'));
+    $after = $resolver->quote('openrouter', $model, $usage, at: new DateTimeImmutable('2027-01-01T00:00:00Z'));
+    $crossing = $resolver->quote('openrouter', $model, $usage, at: new DateTimeImmutable('2026-12-31T23:59:59Z'), until: new DateTimeImmutable('2027-01-01T00:00:01Z'));
+
+    expect($before->amount?->isEqualTo('0.016725'))->toBeTrue()
+        ->and($before->completeness)->toBe(CostCompleteness::Complete)
+        ->and($after->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($crossing->completeness)->toBe(CostCompleteness::Unavailable);
+});
+
+it('does not infer free research billing before the Rosalind start date', function (): void {
+    $usage = new Usage(['input_tokens' => 2000, 'output_tokens' => 3000]);
+    $resolver = app(ResponseCostResolver::class);
+    $before = $resolver->quote('openai', 'gpt-rosalind-research-standard', $usage, at: new DateTimeImmutable('2026-10-04T23:59:59Z'));
+    $at = $resolver->quote('openai', 'gpt-rosalind-research-standard', $usage, at: new DateTimeImmutable('2026-10-05T00:00:00Z'));
+
+    expect($before->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($at->amount?->isEqualTo('0.085'))->toBeTrue()
+        ->and($at->completeness)->toBe(CostCompleteness::Complete);
+});
+
+it('retains short Clef selectors in public quotes and prices documented free output', function (string $selector, string $expected): void {
+    $resolver = app(ResponseCostResolver::class);
+    $quote = $resolver->quote('cloudflare', $selector, new Usage(['input_tokens' => 12345, 'output_tokens' => 777]));
+    $outputOnly = $resolver->quote('cloudflare', $selector, new Usage(['output_tokens' => 777]));
+
+    expect($quote->amount?->isEqualTo($expected))->toBeTrue()
+        ->and($quote->snapshot?->definition->identity->model)->toBe($selector)
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($outputOnly->amount?->isZero())->toBeTrue()
+        ->and($outputOnly->completeness)->toBe(CostCompleteness::Complete);
+})->with([
+    ['clef', '0.0029628'],
+    ['clef-flash', '0.00046911'],
+    ['clef-omni', '0.00185175'],
+]);
+
+it('leaves unsafe new generic identities fallback blocked', function (string $provider, string $model): void {
+    $identity = new ModelIdentity($provider, $model);
+    $quote = app(ResponseCostResolver::class)->quote($provider, $model, new Usage(['input_tokens' => 273000, 'output_tokens' => 1000]));
+
+    expect(packagePricingSource()->find($identity))->toBeNull()
+        ->and(packagePricingSource()->allowsFallback($identity))->toBeFalse()
+        ->and($quote->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($quote->amount)->toBeNull();
+})->with([
+    ['subq', 'subq-preview'],
+    ['openai', 'gpt-5.6-cyber'],
+    ['openai', 'gpt-5.5-cyber'],
+    ['openai', 'gpt-transcribe'],
+    ['openai', 'gpt-live-transcribe'],
+    ['openai', 'gpt-realtime-whisper'],
+    ['openai', 'gpt-image-2.5-sunburst'],
+    ['openai', 'gpt-realtime-2.1-mini'],
+    ['gemini', 'gemini-3.8-flash-tts'],
+    ['gemini', 'gemini-nano-banana-2.1'],
+    ['gemini', 'gemini-embedding-2'],
+    ['gemini', 'gemini-robotics-er-2-preview'],
+    ['openai', 'gpt-audio-1.5'],
+    ['gemini', 'gemini-omni-1.1-flash'],
+    ['gemini', 'gemini-3.5-transcribe'],
+    ['gemini', 'gemini-3.5-transcribe-live'],
+    ['gemini', 'gemini-3.5-live-translate-preview'],
+    ['gemini', 'veo-3.1-generate-preview'],
+    ['gemini', 'veo-3.1-fast-generate-preview'],
+    ['gemini', 'veo-3.1-lite-generate-preview'],
+    ['gemini', 'lyria-3.5'],
+    ['openrouter', 'google/gemini-3.8-flash'],
+    ['openrouter', 'google/gemini-nano-banana-2.1'],
+]);
+
+it('does not double charge inclusive totals when exclusive modalities are priced', function (string $model, Usage $usage, string $expected): void {
+    $quote = app(ResponseCostResolver::class)->quote('gemini', $model, $usage);
+
+    expect($quote->amount?->isEqualTo($expected))->toBeTrue()
+        ->and($quote->completeness)->toBe(CostCompleteness::Partial)
+        ->and($quote->missingUnits)->toBe(['input_tokens', 'output_tokens']);
+})->with([
+    ['gemini-nano-banana-2.1-standard', new Usage(['text_input_tokens' => 2000, 'image_input_tokens' => 3000, 'image_output_tokens' => 1120, 'input_tokens' => 5000, 'output_tokens' => 1120]), '0.0411'],
+    ['gemini-omni-1.1-flash-standard', new Usage(['text_input_tokens' => 2000, 'image_input_tokens' => 3000, 'audio_input_tokens' => 4000, 'video_input_tokens' => 5000, 'text_output_tokens' => 6000, 'video_output_tokens' => 7000, 'input_tokens' => 14000, 'output_tokens' => 13000]), '0.1975'],
+]);
+
+it('does not infer a charge for unsupported Veo Lite 4K or zero billable seconds', function (): void {
+    expect(packagePricingSource()->find(new ModelIdentity('gemini', 'veo-3.1-lite-generate-preview-standard-4k-audio')))->toBeNull();
+
+    $quote = app(ResponseCostResolver::class)->quote('gemini', 'veo-3.1-lite-generate-preview-standard-1080p-audio', new Usage(['billable_video_seconds' => 0]));
+
+    // Preserve the existing all-zero Usage contract; the caller owns the
+    // provider's failed-generation waiver, not the snapshot or calculator.
+    expect($quote->amount)->toBeNull()
+        ->and($quote->completeness)->toBe(CostCompleteness::Unavailable);
+});
 
 function packagePricingSource(): PackagePricingSource
 {
@@ -33,7 +233,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-11')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-13')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -289,13 +489,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:45:00+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-13T02:14:22+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:45:00+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-13T02:14:22+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -315,8 +515,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(16)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-11T09:45:00+00:00')
+    expect($snapshot['version'])->toBe(17)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-13T02:14:22+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -335,7 +535,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10|11))\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10|11|13))\./');
     }
 });
 
@@ -366,9 +566,9 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-11T09:45:00+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-13T02:14:22+00:00')
         ->and($definition->effectiveAt)->toBeNull()
-        ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain('Checked 2026-10-09.')
+        ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain(str_starts_with($key, 'cloudflare:') ? 'Checked 2026-10-13.' : 'Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
         ->and($partial->completeness)->toBe(CostCompleteness::Partial)
         ->and($partial->missingUnits)->toBe(['unknown_billed_unit'])
@@ -383,8 +583,8 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
     ['zai:glm-5.3', 'https://docs.z.ai/guides/overview/pricing', ['input_tokens' => '1.4', 'cached_input_tokens' => '0.26', 'output_tokens' => '4.4'], '0.016'],
     ['zai:glm-5.3-flash', 'https://docs.z.ai/guides/overview/pricing', ['input_tokens' => '0.15', 'cached_input_tokens' => '0.03', 'output_tokens' => '0.50'], '0.0018'],
     ['deepseek:deepseek-v4-pro-peak', 'https://api-docs.deepseek.com/quick_start/pricing', ['input_tokens' => '1.32', 'cached_input_tokens' => '0.044', 'output_tokens' => '3.96'], '0.01452'],
-    ['cloudflare:@cf/cloudflare/clef', 'https://developers.cloudflare.com/workers-ai/platform/pricing/', ['input_tokens' => '0.24'], '0.00048'],
-    ['cloudflare:@cf/cloudflare/clef-flash', 'https://developers.cloudflare.com/workers-ai/platform/pricing/', ['input_tokens' => '0.09'], '0.00018'],
+    ['cloudflare:@cf/cloudflare/clef', 'https://developers.cloudflare.com/workers-ai/platform/pricing/', ['input_tokens' => '0.24', 'output_tokens' => '0'], '0.00048'],
+    ['cloudflare:@cf/cloudflare/clef-flash', 'https://developers.cloudflare.com/workers-ai/platform/pricing/', ['input_tokens' => '0.038', 'output_tokens' => '0'], '0.000076'],
 ]);
 
 it('keeps unspecified routing and retired eval identities unavailable instead of choosing a cheap tier', function (string $provider, string $sku): void {
@@ -678,6 +878,7 @@ it('keeps every fallback-blocked identity unpriced unless it is an allowlisted b
     // this list exactly, in fallback_blocked order, so any new
     // priced-and-blocked identity fails until it is added here on purpose.
     $boundBasesAllowlist = [
+        'openrouter:google/gemini-3.8-flash-standard',
         'openrouter:openai/gpt-5.6-terra-272k',
         'openrouter:openai/gpt-6-luna-272k',
         'openrouter:google/gemini-3.1-flash-lite-standard-max',
