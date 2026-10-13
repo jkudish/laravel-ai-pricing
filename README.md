@@ -284,6 +284,8 @@ The OpenRouter `-standard-max` bases are conservative bound bases too. Each pric
 
 When text, image, audio, or video tokens have different prices, an inclusive token total cannot identify the amount owed. Differentiated bases use exclusive units: `text_input_tokens`, `text_output_tokens`, `image_input_tokens`, `image_output_tokens`, `audio_input_tokens`, `audio_output_tokens`, `video_input_tokens`, and `video_output_tokens`. Cached tokens use `cached_text_input_tokens`, `cached_image_input_tokens`, or `cached_audio_input_tokens` and must be excluded from the corresponding uncached count.
 
+`text_output_tokens` includes reasoning or thinking tokens. Do not pass those tokens separately as `reasoning_tokens` on a differentiated modality basis.
+
 Pass each billable token in exactly one unit. Do not pass inclusive `input_tokens` or `output_tokens` alongside their modality breakdown. These bases leave generic totals unpriced; missing breakdowns return partial or unavailable quotes. Image counts and audio durations are different units and cannot substitute for token counts. An adapter can recover a breakdown only when the provider reports enough information to prove that its parts are disjoint and complete.
 
 OpenRouter's documented audio fields price tokens. Its `image` and `image_output` field documentation conflicts with the token-scaled values in the public catalog, so those fields remain unmapped. A price that needs one of those ambiguous fields is not a complete image quote. Prefer provider-reported cost or an application-configured rate whose unit you verified.
