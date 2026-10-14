@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-14
+
 ### Added
 
 - Pricing snapshot v18 (retrieved 2026-10-14) adds `gemini:gemini-4-argon-standard`, the Gemini Developer API paid standard tier for Gemini 4 Argon. Its dated rate windows bill USD 2/M input, 10/M output and 0.10/M implicit cache hits through November 30, 2026, then 4/M, 20/M and 0.20/M from 2026-12-01T00:00Z. Google states no timezone, so the boundary uses UTC. Google Search grounding bills USD 14 per 1,000 queries in both windows, and the free monthly allowance is not subtracted. No long-context tier exists. Cache writes stay unpriced because Argon supports only implicit caching. Batch, flex and priority are excluded. Source: <https://ai.google.dev/gemini-api/docs/pricing>.
@@ -203,7 +205,8 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.0...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.1...main
+[0.4.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.2.3...v0.3.0
