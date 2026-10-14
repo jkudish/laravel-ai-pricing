@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 17,
-    'retrieved_at' => '2026-10-13T02:14:22+00:00',
+    'version' => 18,
+    'retrieved_at' => '2026-10-14T04:43:10+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -52,6 +52,13 @@ return [
         // standard global routing is priced only by the reviewed dated basis.
         'openrouter:google/gemini-3.8-flash',
         'openrouter:google/gemini-3.8-flash-standard',
+        // Checked 2026-10-14 against
+        // https://openrouter.ai/api/v1/models/google/gemini-4-argon-20261013/endpoints.
+        // Same storage-only cache-write value, and Google doubles the upstream rates on
+        // 2026-12-01 with no published OpenRouter successor rate. Only the reviewed,
+        // expiring -standard basis may price standard global routing.
+        'openrouter:google/gemini-4-argon',
+        'openrouter:google/gemini-4-argon-standard',
         // image_output is per image in the public schema, but looks like a
         // per-token rate in this live catalog. Do not choose either unit.
         'openrouter:google/gemini-nano-banana-2.1',
@@ -157,6 +164,10 @@ return [
         'gemini:gemini-flash-latest',
         'gemini:gemini-flash-lite-latest',
         'gemini:gemini-pro-latest',
+        // Checked 2026-10-14 against https://ai.google.dev/gemini-api/docs/pricing.
+        // gemini-4-argon is paid-only, service_tier still selects standard, flex, priority
+        // or batch rates, and every rate doubles on 2026-12-01. Use gemini-4-argon-standard.
+        'gemini:gemini-4-argon',
         // Bound OpenRouter bases priced only by the snapshot (on the invariant-test allowlist).
         'openrouter:google/gemini-3.6-flash-standard-max-2026',
         'openrouter:google/gemini-3.5-flash-lite-standard-max',
@@ -378,6 +389,13 @@ return [
         'openrouter:z-ai/glm-4.7-standard-max',
         'openrouter:z-ai/glm-4.6-standard-max',
         'openrouter:z-ai/glm-4.5-air-standard-max',
+        // Checked 2026-10-14 against
+        // https://openrouter.ai/api/v1/models/meta/muse-wonder-20261012/endpoints. One meta
+        // endpoint today, but the model-level headline would silently follow endpoint churn
+        // (for example a regional uplift) on a two-day-old model; only the reviewed bound
+        // basis may price Muse Wonder on OpenRouter.
+        'openrouter:meta/muse-wonder',
+        'openrouter:meta/muse-wonder-standard',
         'you:research-frontier',
         'searchapi:search',
         'tavily:search',
@@ -827,6 +845,22 @@ return [
                         'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
                         'cached_input_tokens' => ['amount' => '0.075', 'per' => '1000000'],
                         'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+                    ],
+                ],
+            ],
+        ],
+        'openrouter:google/gemini-4-argon-standard' => [
+            'source' => 'https://openrouter.ai/api/v1/models/google/gemini-4-argon-20261013/endpoints',
+            'notes' => 'Checked 2026-10-14. Bound billing basis for OpenRouter Gemini 4 Argon canonical google/gemini-4-argon-20261013, standard default routing only to google-ai-studio or google-vertex/global (no regional endpoints). Excludes /flex, /priority, :batch (google/gemini-4-argon:batch), service_tier, :nitro and :floor. Both standard global endpoints agree on token rates (USD 2/M input, 10/M output, 0.10/M cache read; image and audio input at the prompt rate), matching Google\'s introductory standard rates at https://ai.google.dev/gemini-api/docs/pricing; no prompt override. Every endpoint carries catalog discount 0.5, consistent with the introductory price being half of Google\'s December 2026 rates. Input includes modalities at the same rate, with exclusive cache-read partitions; reasoning is included in output (internal_reasoning equals the completion rate, so no separate reasoning rate is published). The catalog cache-write value (0.1875/M) has unverified storage semantics and Gemini 4 Argon supports implicit caching only; no per-token write fee is inferred. web_searches counts native Google Search grounding queries only (catalog web_search 0.014 per call, Google USD 14 per 1,000 queries, passed through per https://openrouter.ai/docs/guides/features/server-tools/web-search); that guide does not yet list Gemini 4 Argon among native-search models, so map usage.server_tool_use.web_search_requests only when the response shows the native engine ran; Exa and other engines stay unpriced. Google doubles the upstream rates starting December 1, 2026, but future OpenRouter endpoint rates are not published, so this basis expires at 2026-12-01T00:00Z (UTC assumed because Google specifies no timezone) instead of borrowing native future prices. Re-review at the boundary and on endpoint churn: a change to the canonical revision, default-tier endpoint set, token rates or search pricing requires fresh review. Only snapshot or configured override may price this basis; not an alias.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
                     ],
                 ],
             ],
@@ -1833,6 +1867,32 @@ return [
                         'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
                         'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
                         'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+            ],
+        ],
+        'gemini:gemini-4-argon-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-10-14. Date-windowed billing basis for gemini-4-argon (stable model code, https://ai.google.dev/gemini-api/docs/models/gemini-4-argon) on the Gemini Developer API (generateContent or Interactions), paid tier, standard service tier (service_tier omitted or standard); not a provider alias. Gemini 4 Argon has no free tier and is not on the Google AI Pro plan. Google publishes introductory rates through November 30, 2026 (USD 2/M input, 10/M output, 0.10/M cache hits) and doubles every token rate starting December 1, 2026 (4/M, 20/M, 0.20/M). Google states no timezone, so the package changes windows at 2026-12-01T00:00Z. An actual cost uses the window in effect when the request ran; a maximum-cost estimate uses the higher rate whenever its interval reaches December 2026. One input rate covers text, image, video, audio and PDF input. No long-context tier: one rate for every prompt length up to the 1,048,576-token context window. Output includes thinking tokens; no separate reasoning rate. Long decode (Interactions background execution beyond 65,536 output tokens) bills every token of every 64K hop, including repeated input, at these rates. cached_input_tokens covers implicit cache hits (input partitions are exclusive); explicit caching is not supported, so there is no cache storage charge and no per-token cache-write fee, and cache_write_input_tokens stays unpriced. web_searches counts individual Google Search grounding queries the model executes (USD 14 per 1,000 in both windows); the monthly free allowance of 5,000 shared across Gemini 3 and newer models is not subtracted. Google Maps grounding is excluded. Excludes batch and flex (half the standard rates), priority (1.8x; a downgraded priority request bills at standard, see the x-gemini-service-tier response header), and Vertex AI / Gemini Enterprise Agent Platform pricing. Re-review before 2026-12-01 in case Google changes the announced rates.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2026-12-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '20', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
                         'web_searches' => ['amount' => '0.014', 'per' => '1'],
                     ],
                 ],
@@ -2928,6 +2988,16 @@ return [
                 'output_tokens' => ['amount' => '1.1', 'per' => '1000000'],
             ],
         ],
+        'openrouter:meta/muse-wonder-standard' => [
+            'source' => 'https://openrouter.ai/api/v1/models/meta/muse-wonder-20261012/endpoints',
+            'notes' => 'Checked 2026-10-14. Bound billing basis for OpenRouter meta/muse-wonder (canonical meta/muse-wonder-20261012), whose only endpoint is meta (Meta Model API, Standard mode) at USD 4/M input, 20/M output and 0.20/M cache read, matching muse-wonder-1.0 at https://dev.meta.ai/docs/pricing-rate-limits; catalog discount 0, no prompt override, no opt-in tier endpoints and no :batch variant. Meta publishes no long-context premium. Reasoning is output usage: Meta bills reasoning tokens at the output rate and the catalog publishes no internal_reasoning rate. Input cache partitions are exclusive; Meta caches prefixes automatically and the catalog publishes no cache-write rate, so cache_write_input_tokens stays unpriced. web_searches counts Meta native web_search queries only, at the catalog web_search 0.0025 per call, matching Meta\'s USD 2.50 per 1,000 search queries; the OpenRouter web-search guide does not list Meta among native-search providers, so map usage.server_tool_use.web_search_requests only when the response shows the native engine ran; Exa and other engines stay unpriced. Excludes Muse Wonder Full, which has no per-token price. The generic openrouter:meta/muse-wonder identity is fallback-blocked. Prefer provider-reported usage.cost for completed requests. Snapshot invalidation: a change to the canonical revision, endpoint set, token rates or search pricing requires fresh review.',
+            'rates' => [
+                'input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '20', 'per' => '1000000'],
+                'web_searches' => ['amount' => '0.0025', 'per' => '1'],
+            ],
+        ],
         'you:answer' => [
             'source' => 'https://you.com/pricing',
             'notes' => 'Checked 2026-09-03. Carried forward unchanged from snapshot v3.',
@@ -3115,6 +3185,16 @@ return [
                 'screenshot_urls' => ['amount' => '0.05', 'per' => '1'],
                 'code_executions' => ['amount' => '0.1', 'per' => '1'],
                 'additional_deliverables' => ['amount' => '0.1', 'per' => '1'],
+            ],
+        ],
+        'meta:muse-wonder-1.0' => [
+            'source' => 'https://dev.meta.ai/docs/pricing-rate-limits',
+            'notes' => 'Checked 2026-10-14. muse-wonder-1.0 on Meta Model API (https://api.meta.ai/v1, Responses, Chat Completions or Messages API), pay-as-you-go Standard mode; Contributor mode is not available for Muse Wonder, so the model ID selects one rate. Confirmed on https://dev.meta.ai/models/muse-wonder/ and https://dev.meta.ai/products/meta-model-api/: USD 4/M input, 0.20/M cached input, 20/M output. No long-context premium: one rate for every prompt length up to the 1,048,576-token context window, and one input rate for text, image, video, audio and PDF input. Reasoning tokens bill at the output rate (https://dev.meta.ai/docs/reasoning); every reasoning_effort level, including max, uses the same per-token price. Meta reports cached_tokens as a subset of input tokens; the package input partitions are exclusive, so pass uncached input as input_tokens and cache hits as cached_input_tokens. Prefix caching is automatic with no published cache-write or storage fee, so cache_write_input_tokens stays unpriced. web_searches counts web_search tool queries at USD 2.50 per 1,000 search queries, in addition to token cost; Meta documents each web_search_call output item as one search performed and documents no usage search counter, so callers must pass the count or the searches go unbilled. Meta-injected steering tokens are not billed or reported. Excludes Muse Wonder Full (subscription-only in Muse Code, no per-token price), Muse Code subscriptions, the USD 20 launch credit and OpenRouter. Muse Wonder is in preview; re-review on any pricing-page change.',
+            'rates' => [
+                'input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '20', 'per' => '1000000'],
+                'web_searches' => ['amount' => '0.0025', 'per' => '1'],
             ],
         ],
         'typesafe:jev-1.13.0' => [
