@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Pricing snapshot v18 (retrieved 2026-10-14) adds `gemini:gemini-4-argon-standard`, the Gemini Developer API paid standard tier for Gemini 4 Argon. Its dated rate windows bill USD 2/M input, 10/M output and 0.10/M implicit cache hits through November 30, 2026, then 4/M, 20/M and 0.20/M from 2026-12-01T00:00Z. Google states no timezone, so the boundary uses UTC. Google Search grounding bills USD 14 per 1,000 queries in both windows, and the free monthly allowance is not subtracted. No long-context tier exists. Cache writes stay unpriced because Argon supports only implicit caching. Batch, flex and priority are excluded. Source: <https://ai.google.dev/gemini-api/docs/pricing>.
+- `meta:muse-wonder-1.0` on Meta Model API pay-as-you-go Standard mode: USD 4/M input, 0.20/M cached input and 20/M output (reasoning included), with no long-context premium. Web search grounding bills USD 2.50 per 1,000 search queries; pass the count yourself. Muse Wonder Full is subscription-only and remains unpriced. Source: <https://dev.meta.ai/docs/pricing-rate-limits>.
+- Bound OpenRouter bases `openrouter:google/gemini-4-argon-standard` and `openrouter:meta/muse-wonder-standard`, reviewed against their endpoint catalogs. The Argon basis covers the standard Google AI Studio and Vertex global endpoints at Google's introductory rates. It expires at 2026-12-01T00:00Z because OpenRouter publishes no rate for after Google's price change. Muse Wonder's only endpoint matches Meta's list rates. Search is priced only for the native engine. OpenRouter Gemini cache writes stay unpriced.
+
+### Changed
+
+- `gemini:gemini-4-argon`, `openrouter:google/gemini-4-argon` and `openrouter:meta/muse-wonder` are fallback-blocked. A response that reports one of them quotes unavailable; quote the matching basis instead.
+
 ## [0.4.0] - 2026-10-13
 
 **Compatibility:** generic token totals for differentiated OpenRouter models may now return partial or unavailable instead of a complete text-rate quote. Supply exclusive modality counts or use provider-reported cost. Pre-upgrade cached catalogs adopt the safer mappings when read; no cache flush is required.
