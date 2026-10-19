@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Pricing snapshot v19 (retrieved 2026-10-19) adds the bound OpenRouter basis `openrouter:deepseek/deepseek-v4.1-flash-1017-standard-max` for DeepSeek V4.1 Flash 1017 (canonical `deepseek/deepseek-v4.1-flash-20261017`). Each rate is the maximum over all 13 default-routed endpoints, including every quantization and time-of-day override: USD 0.3/M input and 1.2/M output from `deepseek` peak overrides (tied with other endpoints), and 0.008/M cached input from `relace` and `inference-net/fp8`. The catalog lists 15 endpoints; the two opt-in DeepInfra flex/priority endpoints are excluded. Batch, opt-in service tiers, cache writes and server tools are not covered. Re-review on endpoint churn. Source: <https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints> (checked 2026-10-19).
+
+### Changed
+
+- The generic `openrouter:deepseek/deepseek-v4.1-flash-1017` identity is fallback-blocked, so it cannot use a cheaper live catalog or Portkey headline price. Quote the qualified `-standard-max` basis for requests that meet its conditions, or configure the generic identity explicitly. The basis itself is also fallback-blocked and is not an alias.
+
 ## [0.4.1] - 2026-10-14
 
 ### Added

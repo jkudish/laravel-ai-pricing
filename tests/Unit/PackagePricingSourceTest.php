@@ -236,7 +236,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-14')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-19')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -492,13 +492,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-14T04:43:10+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-19T04:35:13+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-14T04:43:10+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-19T04:35:13+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -518,8 +518,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(18)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-14T04:43:10+00:00')
+    expect($snapshot['version'])->toBe(19)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-19T04:35:13+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -538,7 +538,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10|11|13|14))\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10|11|13|14|19))\./');
     }
 });
 
@@ -569,7 +569,7 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-14T04:43:10+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-19T04:35:13+00:00')
         ->and($definition->effectiveAt)->toBeNull()
         ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain(str_starts_with($key, 'cloudflare:') ? 'Checked 2026-10-13.' : 'Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
@@ -627,6 +627,7 @@ it('keeps unspecified routing and retired eval identities unavailable instead of
     ['openrouter', 'openai/gpt-6-luna'],
     ['openrouter', 'openai/gpt-oss-120b'],
     ['openrouter', 'deepseek/deepseek-v4-pro-0813'],
+    ['openrouter', 'deepseek/deepseek-v4.1-flash-1017'],
     ['openrouter', 'qwen/qwen3.7-plus'],
     ['openrouter', 'moonshotai/kimi-k3'],
     ['openrouter', 'z-ai/glm-5.3'],
@@ -942,6 +943,7 @@ it('keeps every fallback-blocked identity unpriced unless it is an allowlisted b
         'openrouter:openai/gpt-4.1-mini-standard-max',
         'openrouter:openai/gpt-4o-mini-standard-max',
         'openrouter:deepseek/deepseek-v4.1-flash-standard-max',
+        'openrouter:deepseek/deepseek-v4.1-flash-1017-standard-max',
         'openrouter:deepseek/deepseek-v4-pro-0813-standard-max',
         'openrouter:deepseek/deepseek-v4-pro-standard-max',
         'openrouter:deepseek/deepseek-v4-flash-standard-max',
@@ -1009,13 +1011,13 @@ function basisPrices(string $key): array
 }
 
 /** @param array<string, string|BigDecimal> $expected */
-function expectBasisPrices(string $key, array $expected): void
+function expectBasisPrices(string $key, array $expected, string $reviewDate = '2026-10-10'): void
 {
     $actual = basisPrices($key);
     $rates = packagePricingSnapshot()['prices'][$key]['rates'];
 
     expect(array_keys($actual))->toEqualCanonicalizing(array_keys($expected), "[{$key}] publishes other units.")
-        ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toStartWith('Checked 2026-10-10.')
+        ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toStartWith("Checked {$reviewDate}.")
         ->and(packagePricingSnapshot()['prices'][$key]['source'])->toStartWith('https://');
 
     foreach ($expected as $unit => $price) {
@@ -1325,19 +1327,20 @@ it('prices each Qwen basis with 20% implicit cache hits and 125% explicit cache 
     ['dashscope:qwen3-coder-flash-intl-1m', '1.6', '9.6'],
 ]);
 
-it('prices each open-lab OpenRouter bound basis at its worst default-routed endpoint', function (string $model, string $input, string $cacheRead, ?string $cacheWrite, string $output): void {
+it('prices each open-lab OpenRouter bound basis at its worst default-routed endpoint', function (string $model, string $input, string $cacheRead, ?string $cacheWrite, string $output, string $reviewDate = '2026-10-10'): void {
     $expected = ['input_tokens' => $input, 'cached_input_tokens' => $cacheRead, 'output_tokens' => $output];
 
     if ($cacheWrite !== null) {
         $expected['cache_write_input_tokens'] = $cacheWrite;
     }
 
-    expectBasisPrices("openrouter:{$model}-standard-max", $expected);
+    expectBasisPrices("openrouter:{$model}-standard-max", $expected, $reviewDate);
 
     expect(packagePricingSnapshot()['prices']["openrouter:{$model}-standard-max"]['notes'])->toContain('Worst-case default-routed endpoint, re-review on endpoint churn')
         ->and(packagePricingSource()->allowsFallback(new ModelIdentity('openrouter', $model)))->toBeFalse();
 })->with([
     ['deepseek/deepseek-v4.1-flash', '0.45', '0.049', null, '1.8'],
+    ['deepseek/deepseek-v4.1-flash-1017', '0.3', '0.008', null, '1.2', '2026-10-19'],
     ['deepseek/deepseek-v4-pro-0813', '1.65', '0.219', null, '5'],
     ['deepseek/deepseek-v4-pro', '1.91', '0.33', null, '10.5'],
     ['deepseek/deepseek-v4-flash', '0.44', '0.07', null, '1.536'],
@@ -1363,6 +1366,25 @@ it('prices each open-lab OpenRouter bound basis at its worst default-routed endp
     ['z-ai/glm-4.6', '0.6', '0.11', null, '2.2'],
     ['z-ai/glm-4.5-air', '0.2', '0.03', null, '1.1'],
 ]);
+
+it('quotes DeepSeek V4.1 Flash 1017 with reviewed provenance without hiding unpriced cache writes or tools', function (): void {
+    config()->set('ai-pricing.offline', true);
+    $model = 'deepseek/deepseek-v4.1-flash-1017-standard-max';
+    $usage = ['input_tokens' => 1_000_000, 'cached_input_tokens' => 200_000, 'output_tokens' => 100_000];
+    $quote = AiPricing::quote('openrouter', $model, new Usage($usage));
+    $partial = AiPricing::quote('openrouter', $model, new Usage([
+        ...$usage, 'cache_write_input_tokens' => 1_000, 'openrouter_web_searches' => 1,
+    ]));
+
+    // 1M x 0.3/M + 200,000 x 0.008/M + 100,000 x 1.2/M = 0.4216.
+    expect($quote->amount?->isEqualTo('0.4216'))->toBeTrue()
+        ->and($quote->completeness)->toBe(CostCompleteness::Complete)
+        ->and($quote->source)->toBe(PricingSource::ProviderNative)
+        ->and($quote->provenance?->reference)->toBe('https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints')
+        ->and($partial->amount?->isEqualTo('0.4216'))->toBeTrue()
+        ->and($partial->completeness)->toBe(CostCompleteness::Partial)
+        ->and($partial->missingUnits)->toEqualCanonicalizing(['cache_write_input_tokens', 'openrouter_web_searches']);
+});
 
 it('quotes one model per new family against a hand-calculated total', function (string $provider, string $model, array $usage, string $expected): void {
     $quote = AiPricing::quote($provider, $model, new Usage($usage));

@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 18,
-    'retrieved_at' => '2026-10-14T04:43:10+00:00',
+    'version' => 19,
+    'retrieved_at' => '2026-10-19T04:35:13+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -339,6 +339,7 @@ return [
         // quantizations, context lengths or time-of-day/prompt-length overrides, and
         // the live catalog prices only the /models headline. Use the -standard-max bases.
         'openrouter:deepseek/deepseek-v4.1-flash',
+        'openrouter:deepseek/deepseek-v4.1-flash-1017', // Checked 2026-10-19.
         'openrouter:deepseek/deepseek-v4-pro-0813',
         'openrouter:deepseek/deepseek-v4-pro',
         'openrouter:deepseek/deepseek-v4-flash',
@@ -365,6 +366,7 @@ return [
         'openrouter:z-ai/glm-4.5-air',
         // Bound bases priced only by the snapshot (on the invariant-test allowlist).
         'openrouter:deepseek/deepseek-v4.1-flash-standard-max',
+        'openrouter:deepseek/deepseek-v4.1-flash-1017-standard-max',
         'openrouter:deepseek/deepseek-v4-pro-0813-standard-max',
         'openrouter:deepseek/deepseek-v4-pro-standard-max',
         'openrouter:deepseek/deepseek-v4-flash-standard-max',
@@ -2762,6 +2764,15 @@ return [
                 'input_tokens' => ['amount' => '0.45', 'per' => '1000000'],
                 'cached_input_tokens' => ['amount' => '0.049', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '1.8', 'per' => '1000000'],
+            ],
+        ],
+        'openrouter:deepseek/deepseek-v4.1-flash-1017-standard-max' => [
+            'source' => 'https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints',
+            'notes' => 'Checked 2026-10-19. Synthetic worst-case billing basis for deepseek/deepseek-v4.1-flash-1017 (canonical deepseek/deepseek-v4.1-flash-20261017 per https://openrouter.ai/api/v1/models) under OpenRouter default routing at the standard service tier; not :batch or an alias. The catalog lists 15 endpoints, including 2 opt-in tier endpoints excluded from this basis (deepinfra/fp8/flex and deepinfra/fp8/priority, service_tier flex/priority). Default routing spans 10 distinct price sets across 13 default-routed endpoints, quantizations fp8/mxfp4/unknown, context 262,144-1,048,576, including deepseek time-of-day overrides, so the live catalog headline (input 0.15, output 0.6 per M) can understate a request. Each rate is the maximum over all default-routed endpoints, including every quantization and override: input_tokens 0.3 from deepseek peak overrides (tied with together, fireworks, primeintellect, baseten and parasail/fp8); cached_input_tokens 0.008 from relace and inference-net/fp8; output_tokens 1.2 from deepseek peak overrides (tied with crusoe/fp8, together, fireworks, primeintellect, baseten and parasail/fp8). The deepseek peak overrides publish input 0.3, output 1.2 and cache read 0.006 per M. Maxima can come from different endpoints, so the basis can exceed any single endpoint. Callers must not opt into service tiers (service_tier, :nitro, :floor or tier slugs). Reasoning is output usage; cache writes, OpenRouter web search and other server tools are distinct, unpriced units. Prefer provider-reported usage.cost for completed requests. Worst-case default-routed endpoint, re-review on endpoint churn: any change to the canonical revision, endpoint set, rates or overrides requires fresh review.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.3', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.008', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '1.2', 'per' => '1000000'],
             ],
         ],
         'openrouter:deepseek/deepseek-v4-pro-0813-standard-max' => [
