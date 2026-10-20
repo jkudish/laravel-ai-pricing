@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-19
+
 ### Added
 
 - Pricing snapshot v19 (retrieved 2026-10-19) adds the bound OpenRouter basis `openrouter:deepseek/deepseek-v4.1-flash-1017-standard-max` for DeepSeek V4.1 Flash 1017 (canonical `deepseek/deepseek-v4.1-flash-20261017`). Each rate is the maximum over all 13 default-routed endpoints, including every quantization and time-of-day override: USD 0.3/M input and 1.2/M output from `deepseek` peak overrides (tied with other endpoints), and 0.008/M cached input from `relace` and `inference-net/fp8`. The catalog lists 15 endpoints; the two opt-in DeepInfra flex/priority endpoints are excluded. Batch, opt-in service tiers, cache writes and server tools are not covered. Re-review on endpoint churn. Source: <https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints> (checked 2026-10-19).
@@ -213,7 +215,8 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.1...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.2...main
+[0.4.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.0...v0.3.1
