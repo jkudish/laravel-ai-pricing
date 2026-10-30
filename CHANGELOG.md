@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Pricing snapshot v20 (retrieved 2026-10-30) adds `parallel:decisions-fast`, the Parallel Decisions API (`POST /v1/decisions`) in its only mode, `fast`: USD 1 per 1,000 `requests`. One request answers up to 100 questions over shared web evidence, so count requests, not questions. Parallel publishes no token rate for Decisions, so reported tokens stay unpriced rather than free. Whether refused or failed requests are billed is undocumented, and the 5,000 free signup requests are not subtracted. Source: <https://docs.parallel.ai/getting-started/pricing> (checked 2026-10-30).
+
 ## [0.4.2] - 2026-10-19
 
 ### Added

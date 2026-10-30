@@ -125,13 +125,14 @@ The snapshot-level `retrieved_at` records when the package snapshot was assemble
 | `perplexity` | `agent-low`, `agent-medium`, `agent-high` | `web_searches`, `fetch_url_requests`, `people_searches`, `finance_searches`, `sandbox_sessions`, `sandbox_searches` |
 | `perplexity` | `search` | `requests` |
 | `parallel` | `turbo` | `requests`, `additional_results` |
+| `parallel` | `decisions-fast` | `requests` |
 | `parallel` | `research-lite`, `research-base`, `research-core`, `research-core2x`, `research-pro`, `research-ultra`, `research-ultra2x`, `research-ultra4x`, `research-ultra8x` | `processor_requests` |
 | `valyu` | `research-fast`, `research-standard`, `research-heavy`, `research-max` | `research_requests`, `screenshot_urls`, `code_executions`, `additional_deliverables` |
 | `typesafe` | `jev-1.13.0` (aliases `jev-latest`, `jev-preview`) | `input_tokens`, `output_tokens` (free) |
 | `subq` | `subq-snap-preview` | `input_tokens`, `output_tokens` (free) |
 | `xai` | `grok-4.7`, `grok-4.6` | `searches`, `x_search_posts`, `x_search_profiles` |
 
-The Exa request rate includes up to ten results; pass only results above ten as `additional_results`. Pass `uncached_queries: 0` for a free cached Kagi response. You.com Frontier Research has negotiated usage and is intentionally unavailable.
+A Parallel Decisions request answers up to 100 questions, so pass `requests: 1` per call, not the question count. Parallel publishes no token rate for Decisions, so reported tokens stay unpriced. The Exa request rate includes up to ten results; pass only results above ten as `additional_results`. Pass `uncached_queries: 0` for a free cached Kagi response. You.com Frontier Research has negotiated usage and is intentionally unavailable.
 
 The PHP v2 parity profiles use these pricing identities and dispositions:
 
