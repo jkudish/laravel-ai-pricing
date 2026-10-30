@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-30
+
 ### Added
 
 - Pricing snapshot v20 (retrieved 2026-10-30) adds `parallel:decisions-fast`, the Parallel Decisions API (`POST /v1/decisions`) in its only mode, `fast`: USD 1 per 1,000 `requests`. One request answers up to 100 questions over shared web evidence, so count requests, not questions. Parallel publishes no token rate for Decisions, so reported tokens stay unpriced rather than free. Whether refused or failed requests are billed is undocumented, and the 5,000 free signup requests are not subtracted. Source: <https://docs.parallel.ai/getting-started/pricing> (checked 2026-10-30).
@@ -219,7 +221,8 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.2...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.3...main
+[0.4.3]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.3.1...v0.4.0
