@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 19,
-    'retrieved_at' => '2026-10-19T04:35:13+00:00',
+    'version' => 20,
+    'retrieved_at' => '2026-10-30T06:48:21+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -3156,6 +3156,13 @@ return [
             'notes' => 'Checked 2026-10-11. Price per successful Task API run using the ultra8x processor (USD 2400 per 1,000 runs; documented latency 5 minutes to 2 hours). One charge per run regardless of output fields; failed runs are not billed.',
             'rates' => [
                 'processor_requests' => ['amount' => '2400', 'per' => '1000'],
+            ],
+        ],
+        'parallel:decisions-fast' => [
+            'source' => 'https://docs.parallel.ai/getting-started/pricing',
+            'notes' => 'Checked 2026-10-30. Decisions API (POST /v1/decisions) in fast mode, the only mode: USD 1 per 1,000 requests. One request answers up to 100 questions over shared web evidence, so count requests, not questions. Token usage in the response is not billed separately. Parallel does not document whether a request whose answers are all refusals, or a failed request, is billed. The 5,000 free requests on signup are an account allowance and are not subtracted.',
+            'rates' => [
+                'requests' => ['amount' => '1', 'per' => '1000'],
             ],
         ],
         'valyu:research-standard' => [

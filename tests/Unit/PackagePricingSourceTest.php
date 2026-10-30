@@ -236,7 +236,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-19')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-30')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -268,6 +268,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
     'Parallel Research ultra2x' => ['parallel', 'research-ultra2x', 'processor_requests', '600', '1000'],
     'Parallel Research ultra4x' => ['parallel', 'research-ultra4x', 'processor_requests', '1200', '1000'],
     'Parallel Research ultra8x' => ['parallel', 'research-ultra8x', 'processor_requests', '2400', '1000'],
+    'Parallel Decisions fast' => ['parallel', 'decisions-fast', 'requests', '1', '1000'],
     'Valyu Research fast' => ['valyu', 'research-fast', 'research_requests', '0.1', '1'],
     'Valyu Research heavy' => ['valyu', 'research-heavy', 'research_requests', '2.5', '1'],
     'Valyu Research max' => ['valyu', 'research-max', 'research_requests', '15', '1'],
@@ -492,13 +493,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-19T04:35:13+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-30T06:48:21+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-19T04:35:13+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-30T06:48:21+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -518,8 +519,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(19)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-19T04:35:13+00:00')
+    expect($snapshot['version'])->toBe(20)
+        ->and($snapshot['retrieved_at'])->toBe('2026-10-30T06:48:21+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -538,7 +539,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10|11|13|14|19))\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10|11|13|14|19|30))\./');
     }
 });
 
@@ -569,7 +570,7 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-19T04:35:13+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-30T06:48:21+00:00')
         ->and($definition->effectiveAt)->toBeNull()
         ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain(str_starts_with($key, 'cloudflare:') ? 'Checked 2026-10-13.' : 'Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
@@ -1449,6 +1450,25 @@ it('quotes every Parallel processor and Valyu DeepResearch mode per run', functi
     'Valyu heavy with tools' => ['valyu:research-heavy', ['research_requests' => 1, 'screenshot_urls' => 3, 'code_executions' => 1, 'additional_deliverables' => 2], '2.95'],
     'Valyu max' => ['valyu:research-max', ['research_requests' => 1], '15'],
 ]);
+
+it('prices Parallel Decisions per request, not per question or token', function (): void {
+    $definition = packagePricingSource()->find(new ModelIdentity('parallel', 'decisions-fast'));
+    expect($definition)->not->toBeNull();
+    assert($definition !== null);
+    $calculator = new CostCalculator;
+
+    // USD 1 per 1,000 requests; one request may carry up to 100 questions.
+    $one = $calculator->calculate(new Usage(['requests' => 1]), $definition);
+    $many = $calculator->calculate(new Usage(['requests' => 250]), $definition);
+    // Parallel publishes no token rate, so reported tokens stay unpriced instead of free.
+    $tokens = $calculator->calculate(new Usage(['requests' => 1, 'input_tokens' => 4212]), $definition);
+
+    expect($one->cost?->amount->isEqualTo('0.001'))->toBeTrue()
+        ->and($one->completeness)->toBe(CostCompleteness::Complete)
+        ->and($many->cost?->amount->isEqualTo('0.25'))->toBeTrue()
+        ->and($tokens->completeness)->not->toBe(CostCompleteness::Complete)
+        ->and(packagePricingSnapshot()['prices']['parallel:decisions-fast']['notes'])->toStartWith('Checked 2026-10-30.');
+});
 
 it('prices Gemini 4 Argon from dated windows that double every token rate at 2026-12-01T00:00Z', function (): void {
     $key = 'gemini:gemini-4-argon-standard';
