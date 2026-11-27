@@ -405,6 +405,15 @@ return [
         'serpapi:search',
         'serpbase:search',
         'serpbase:news',
+        // Cloro bills plan-priced credits per surface; checked 2026-11-27 against
+        // https://cloro.dev/pricing and https://cloro.dev/docs/guides/providers.
+        'cloro:chatgpt',
+        'cloro:gemini',
+        'cloro:google-ai-mode',
+        'cloro:google-ai-overview',
+        'cloro:bing-ai-mode',
+        'cloro:google-search',
+        'cloro:google-news',
         'gemini:deep-research',
         'parallel:search',
         'valyu:search',

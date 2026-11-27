@@ -205,6 +205,23 @@ identity with the account's current `credits` rate before using a hard budget:
 The example amount is illustrative only. Do not derive either configured rate
 from a public minimum; use the effective price for the consuming account.
 
+Cloro bills credits at a plan-specific rate (USD 0.80 down to 0.36 per 1,000
+credits on monthly plans, checked 2026-11-27), so every Cloro identity is
+unavailable by default: `cloro:chatgpt`, `cloro:gemini`, `cloro:google-ai-mode`,
+`cloro:google-ai-overview`, `cloro:bing-ai-mode`, `cloro:google-search` and
+`cloro:google-news`. Configure the `credits` unit of each identity you use with
+your plan's per-credit rate. Pass the credits a call costs: the async base cost,
+plus 2 for a synchronous call. For example, on a plan that charges USD 0.80 per
+1,000 credits:
+
+```php
+'prices' => [
+    'cloro:chatgpt' => [
+        'credits' => ['amount' => '0.8', 'per' => '1000', 'currency' => 'USD'],
+    ],
+],
+```
+
 ### Built-in model billing bases
 
 Some model prices depend on facts the model name does not carry: inference geography, service tier, prompt length, or the API endpoint. The snapshot publishes those prices as qualified billing bases. A billing basis is a pricing identity that names the conditions its rates apply to. It is not a provider model ID or an alias of one.
