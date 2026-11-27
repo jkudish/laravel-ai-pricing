@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-27
+
 ### Added
 
 - Configured-only Cloro identities `cloro:chatgpt`, `cloro:gemini`, `cloro:google-ai-mode`, `cloro:google-ai-overview`, `cloro:bing-ai-mode`, `cloro:google-search` and `cloro:google-news`. Cloro bills credits at a plan-specific rate, so they are unavailable and fallback-blocked until the account's per-credit `credits` rate is configured, like `searchapi:search`. Sources: <https://cloro.dev/pricing>, <https://cloro.dev/docs/guides/providers> (checked 2026-11-27).
@@ -225,7 +227,8 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.3...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.4...main
+[0.4.4]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.0...v0.4.1
