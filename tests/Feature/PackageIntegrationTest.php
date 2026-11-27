@@ -138,6 +138,28 @@ it('preserves configured override precedence for every DataForSEO package SKU', 
     'Google AI Mode Live' => ['google-ai-mode-live', '0.008'],
 ]);
 
+it('requires the configured Cloro per-credit rate before returning a complete quote', function (): void {
+    $identity = new ModelIdentity('cloro', 'chatgpt');
+    $usage = new Usage(['credits' => 7]);
+
+    $unconfigured = app(CostResolver::class)->resolve(new PricingObservation($identity, $usage));
+
+    config()->set('ai-pricing.prices', [
+        'cloro:chatgpt' => [
+            'credits' => ['amount' => '0.8', 'per' => '1000'],
+        ],
+    ]);
+    app()->forgetInstance(ConfiguredPricingSource::class);
+    app()->forgetInstance(CostResolver::class);
+
+    $configured = app(CostResolver::class)->resolve(new PricingObservation($identity, $usage));
+
+    expect($unconfigured->cost)->toBeNull()
+        ->and($unconfigured->completeness->value)->toBe('unavailable')
+        ->and((string) $configured->cost?->amount)->toBe('0.0056')
+        ->and($configured->completeness->value)->toBe('complete');
+});
+
 it('requires configured SearchAPI account pricing before returning a complete quote', function (): void {
     $identity = new ModelIdentity('searchapi', 'search');
     $usage = new Usage(['successful_search_request' => 2]);

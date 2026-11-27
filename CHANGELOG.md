@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Configured-only Cloro identities `cloro:chatgpt`, `cloro:gemini`, `cloro:google-ai-mode`, `cloro:google-ai-overview`, `cloro:bing-ai-mode`, `cloro:google-search` and `cloro:google-news`. Cloro bills credits at a plan-specific rate, so they are unavailable and fallback-blocked until the account's per-credit `credits` rate is configured, like `searchapi:search`. Sources: <https://cloro.dev/pricing>, <https://cloro.dev/docs/guides/providers> (checked 2026-11-27).
+
 ## [0.4.3] - 2026-10-30
 
 ### Added
