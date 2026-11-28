@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Pricing snapshot v21 (retrieved 2026-11-28) adds these current text models, checked 2026-11-28 against <https://platform.claude.com/docs/en/about-claude/pricing>, <https://developers.openai.com/api/docs/pricing> and <https://ai.google.dev/gemini-api/docs/pricing>:
+  - Anthropic `claude-fable-5-2-global` and `claude-mythos-5-2-global` (USD 8/M input, 40/M output, 0.20/M cache reads, 10/M 5-minute and 16/M 1-hour writes, USD 10 per 1,000 searches; fast mode excluded), and `claude-sonnet-4-5-20250929` (alias `claude-sonnet-4-5`; 3/M, 15/M, 0.30/M, 3.75/M, 6/M).
+  - OpenAI `gpt-6.2-astra-`, `gpt-6.2-sol-` and `gpt-6.1-terra-standard-short`/`-long`, with 0.05x cache reads and the default 30-minute cache write at 1.25x. Responses API 12-hour cache writes (2.5x) are not covered.
+  - OpenAI flat-rate `gpt-5.4-nano-`, `gpt-5.1-`, `gpt-5-`, `gpt-5-mini-`, `gpt-5-nano-`, `gpt-5-pro-`, `o3-` and `o3-pro-standard`. Cache writes are priced at the uncached input rate, and the Pro models have no cache rate.
+  - Gemini `gemini-4-carbon-standard` (2/M, 10/M, 0.10/M, doubling at 2026-12-01T00:00Z), `gemini-4-neon-standard` (3/M, 15/M, 0.15/M) and `gemini-4-hydrogen-standard` (1.50/M, 7.50/M, 0.075/M on the paid tier). These models use implicit caching only, so cache writes stay unpriced.
+- Bound OpenRouter bases `openrouter:openai/gpt-6.1-terra-standard-max-short`/`-long` (canonical `openai/gpt-6.1-terra-20261026`; every default-routed endpoint is at OpenAI's direct rate) and `openrouter:google/gemini-4-neon-standard` (canonical `google/gemini-4-neon-20261118`; standard global endpoints only, no expiry).
+
+### Changed
+
+- The new generic and dated identities are fallback-blocked: `anthropic:claude-fable-5-2` and `claude-mythos-5-2`; `openai:gpt-6.2-astra`, `gpt-6.2-sol`, `gpt-6.1-terra`, `gpt-5.4-nano`, `gpt-5.1`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-pro`, `o3` and `o3-pro`, and their dated snapshot IDs; `gemini:gemini-4-carbon`, `gemini-4-neon` and `gemini-4-hydrogen`; and `openrouter:openai/gpt-6.1-terra` and `openrouter:google/gemini-4-neon`.
+- **Behavior change:** `openai:gpt-5.6-sol-standard-short`/`-long` and the four `openrouter:openai/gpt-5.6-sol[-pro]-standard-max-short`/`-long` bases now expire at 2026-12-01T00:00Z. OpenAI states the promotional pricing is available until November 30, 2026, and publishes no successor rate. From then on, quotes are unavailable instead of guessed. The boundary uses UTC, the earlier fail-closed instant, because OpenAI gives no timezone.
+- **Behavior change:** `gemini:gemini-2.5-pro-standard-short`/`-long` now use rate windows. Google routes every `gemini-2.5-pro` request to Gemini 3.8 Flash from December 1, 2026, so both tiers bill 0.75/M, 3.75/M and 0.075/M from 2026-12-01T00:00Z, then 1.50/M, 7.50/M and 0.15/M from 2027-01-01T00:00Z. `gemini:gemini-2.5-flash-standard` keeps its rates, because routing to 3.5 Flash-Lite bills identical text rates.
+
 ## [0.4.4] - 2026-11-27
 
 ### Added

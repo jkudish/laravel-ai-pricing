@@ -8,8 +8,8 @@ declare(strict_types=1);
  * before changing rates, units, identities, or provenance.
  */
 return [
-    'version' => 20,
-    'retrieved_at' => '2026-10-30T06:48:21+00:00',
+    'version' => 21,
+    'retrieved_at' => '2026-11-28T07:18:49+00:00',
     'effective_at' => null,
     'currency' => 'USD',
     'fallback_blocked' => [
@@ -59,6 +59,13 @@ return [
         // expiring -standard basis may price standard global routing.
         'openrouter:google/gemini-4-argon',
         'openrouter:google/gemini-4-argon-standard',
+        // Checked 2026-11-28 against
+        // https://openrouter.ai/api/v1/models/google/gemini-4-neon-20261118/endpoints.
+        // The catalog also lists /flex and /priority endpoints at other rates, and the
+        // cache-write value has the same unverified storage semantics. Only the reviewed
+        // -standard basis may price standard global routing.
+        'openrouter:google/gemini-4-neon',
+        'openrouter:google/gemini-4-neon-standard',
         // image_output is per image in the public schema, but looks like a
         // per-token rate in this live catalog. Do not choose either unit.
         'openrouter:google/gemini-nano-banana-2.1',
@@ -90,7 +97,10 @@ return [
         // and https://platform.claude.com/docs/en/manage-claude/data-residency. Claude 4.6
         // and later models, including Fable and Mythos, bill inference_geo us at 1.1x,
         // and Opus 5 and Opus 4.8 also have fast mode, so their generic identities
-        // cannot select a rate. Use the -global[-standard] bases.
+        // cannot select a rate. Use the -global[-standard] bases. Checked 2026-11-28:
+        // Fable 5.2 and Mythos 5.2 bill inference_geo us at 1.1x and have fast mode.
+        'anthropic:claude-fable-5-2',
+        'anthropic:claude-mythos-5-2',
         'anthropic:claude-fable-5-1',
         'anthropic:claude-mythos-5-1',
         'anthropic:claude-fable-5',
@@ -168,6 +178,13 @@ return [
         // gemini-4-argon is paid-only, service_tier still selects standard, flex, priority
         // or batch rates, and every rate doubles on 2026-12-01. Use gemini-4-argon-standard.
         'gemini:gemini-4-argon',
+        // Checked 2026-11-28 against https://ai.google.dev/gemini-api/docs/pricing.
+        // service_tier selects standard, flex, priority or batch rates on the same model
+        // code, and gemini-4-carbon doubles every rate on 2026-12-01; gemini-4-hydrogen
+        // also has a free tier. Use the -standard bases.
+        'gemini:gemini-4-carbon',
+        'gemini:gemini-4-neon',
+        'gemini:gemini-4-hydrogen',
         // Bound OpenRouter bases priced only by the snapshot (on the invariant-test allowlist).
         'openrouter:google/gemini-3.6-flash-standard-max-2026',
         'openrouter:google/gemini-3.5-flash-lite-standard-max',
@@ -192,7 +209,12 @@ return [
         // the model pages and https://developers.openai.com/api/docs/deprecations.
         // Generic and dated snapshot IDs cannot carry service tier (batch, flex,
         // fast, ultrafast), regional/FedRAMP uplift or the 272K context tier, so
-        // only the qualified -standard bases are priced.
+        // only the qualified -standard bases are priced. Checked 2026-11-28: GPT-6.2 Astra,
+        // GPT-6.2 Sol and GPT-6.1 Terra are 272K-tiered, and the older flat-rate models
+        // added below (gpt-5.4-nano through o3-pro) still vary by service tier.
+        'openai:gpt-6.2-astra',
+        'openai:gpt-6.2-sol',
+        'openai:gpt-6.1-terra',
         'openai:gpt-6-astra',
         'openai:gpt-6-sol',
         'openai:gpt-5.6-sol',
@@ -206,6 +228,14 @@ return [
         'openai:gpt-5.4-mini',
         'openai:gpt-5.2',
         'openai:gpt-5.2-pro',
+        'openai:gpt-5.4-nano',
+        'openai:gpt-5.1',
+        'openai:gpt-5',
+        'openai:gpt-5-mini',
+        'openai:gpt-5-nano',
+        'openai:gpt-5-pro',
+        'openai:o3',
+        'openai:o3-pro',
         'openai:gpt-4.1',
         'openai:gpt-4.1-mini',
         'openai:gpt-4o',
@@ -228,6 +258,14 @@ return [
         'openai:gpt-5.4-mini-2026-03-17',
         'openai:gpt-5.2-2025-12-11',
         'openai:gpt-5.2-pro-2025-12-11',
+        'openai:gpt-5.4-nano-2026-03-17',
+        'openai:gpt-5.1-2025-11-13',
+        'openai:gpt-5-2025-08-07',
+        'openai:gpt-5-mini-2025-08-07',
+        'openai:gpt-5-nano-2025-08-07',
+        'openai:gpt-5-pro-2025-10-06',
+        'openai:o3-2025-04-16',
+        'openai:o3-pro-2025-06-10',
         'openai:gpt-4.1-2025-04-14',
         'openai:gpt-4.1-mini-2025-04-14',
         'openai:gpt-4o-2024-08-06',
@@ -238,6 +276,8 @@ return [
         // (azure/us, azure/eu, azure/swedencentral, amazon-bedrock/*) endpoints,
         // and openai/gpt-5.6-sol's openai endpoint carries a 50% discount, so the
         // live catalog's headline rate is not a safe price. Use the -standard-max bases.
+        // Checked 2026-11-28: openai/gpt-6.1-terra also lists openai/flex and openai/fast.
+        'openrouter:openai/gpt-6.1-terra',
         'openrouter:openai/gpt-6.1-sol',
         'openrouter:openai/gpt-6.1-sol-pro',
         'openrouter:openai/gpt-6-astra',
@@ -259,6 +299,8 @@ return [
         'openrouter:openai/gpt-4.1-mini',
         'openrouter:openai/gpt-4o-mini',
         // Bound bases priced only by the snapshot (on the invariant-test allowlist).
+        'openrouter:openai/gpt-6.1-terra-standard-max-short',
+        'openrouter:openai/gpt-6.1-terra-standard-max-long',
         'openrouter:openai/gpt-6.1-sol-standard-max-short',
         'openrouter:openai/gpt-6.1-sol-standard-max-long',
         'openrouter:openai/gpt-6.1-sol-pro-standard-max-short',
@@ -430,6 +472,7 @@ return [
         'typesafe:jev-preview' => 'typesafe:jev-1.13.0',
         'anthropic:claude-opus-4-5' => 'anthropic:claude-opus-4-5-20251101',
         'anthropic:claude-haiku-4-5' => 'anthropic:claude-haiku-4-5-20251001',
+        'anthropic:claude-sonnet-4-5' => 'anthropic:claude-sonnet-4-5-20250929',
         'cloudflare:clef' => 'cloudflare:@cf/cloudflare/clef',
         'cloudflare:clef-flash' => 'cloudflare:@cf/cloudflare/clef-flash',
         'cloudflare:clef-omni' => 'cloudflare:@cf/cloudflare/clef-omni',
@@ -876,6 +919,16 @@ return [
                 ],
             ],
         ],
+        'openrouter:google/gemini-4-neon-standard' => [
+            'source' => 'https://openrouter.ai/api/v1/models/google/gemini-4-neon-20261118/endpoints',
+            'notes' => 'Checked 2026-11-28. Bound billing basis for OpenRouter Gemini 4 Neon canonical google/gemini-4-neon-20261118, standard default routing only to google-ai-studio or google-vertex/global (no regional endpoints). Excludes /flex (google-ai-studio/flex), /priority (google-ai-studio/priority, google-vertex/global/priority), :batch, service_tier, :nitro and :floor. Both standard global endpoints agree on token rates (USD 3/M input, 15/M output, 0.15/M cache read; image and audio input at the prompt rate), matching Google\'s standard rates at https://ai.google.dev/gemini-api/docs/pricing; no prompt override and no catalog discount. Input includes modalities at the same rate, with exclusive cache-read partitions; reasoning is included in output (internal_reasoning equals the completion rate, so no separate reasoning rate is published). The catalog cache-write value (about 0.083/M) has unverified storage semantics and Gemini 4 Neon supports implicit caching only; no per-token write fee is inferred. web_searches counts native Google Search grounding queries only (catalog web_search 0.014 per call, Google USD 14 per 1,000 queries, passed through per https://openrouter.ai/docs/guides/features/server-tools/web-search); map usage.server_tool_use.web_search_requests only when the response shows the native engine ran; Exa and other engines stay unpriced. Google announces no price change for Gemini 4 Neon, so this basis has no expiry. Re-review on endpoint churn: a change to the canonical revision, default-tier endpoint set, token rates or search pricing requires fresh review. Only snapshot or configured override may price this basis; not an alias.',
+            'rates' => [
+                'input_tokens' => ['amount' => '3', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '15', 'per' => '1000000'],
+                'web_searches' => ['amount' => '0.014', 'per' => '1'],
+            ],
+        ],
         'anthropic:claude-opus-5-5-global-standard' => [
             'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
             'notes' => 'Checked 2026-10-09. Billing basis for claude-opus-5-5, global geography, standard speed, synchronous Messages API only; not a provider alias. All context lengths. Excludes fast mode, US geography (1.1x), batch and server tools. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs.',
@@ -919,6 +972,30 @@ return [
                 'cached_input_tokens' => ['amount' => '0.05', 'per' => '1000000'],
                 'cache_write_input_tokens_5m' => ['amount' => '0.625', 'per' => '1000000'],
                 'cache_write_input_tokens_1h' => ['amount' => '1', 'per' => '1000000'],
+            ],
+        ],
+        'anthropic:claude-fable-5-2-global' => [
+            'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
+            'notes' => 'Checked 2026-11-28. Billing basis for claude-fable-5-2 (Claude Fable 5.2) with global geography (inference_geo global, the default), synchronous Messages API only; not a provider alias. All context lengths up to 1M tokens bill at one rate. Standard speed only: fast mode (speed fast, usage.speed fast) bills USD 16/M input and 80/M output and is excluded. No prompt-length tier. Cache reads are 0.025x input. Excludes US geography (inference_geo us bills 1.1x on every token category), batch, Priority Tier, Bedrock, Google Cloud and Foundry. Thinking is output usage. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs, and no generic cache-write rate is published. web_searches counts usage.server_tool_use.web_search_requests at USD 10 per 1,000 searches (failed searches are not billed; the adapters map it from non-streamed responses). Code execution, web fetch tokens and other server tools are not priced here.',
+            'rates' => [
+                'input_tokens' => ['amount' => '8', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '40', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'cache_write_input_tokens_5m' => ['amount' => '10', 'per' => '1000000'],
+                'cache_write_input_tokens_1h' => ['amount' => '16', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'anthropic:claude-mythos-5-2-global' => [
+            'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
+            'notes' => 'Checked 2026-11-28. Billing basis for claude-mythos-5-2 (Claude Mythos 5.2) with global geography (inference_geo global, the default), synchronous Messages API only; not a provider alias. All context lengths up to 1M tokens bill at one rate. Limited access: only organizations verified through an Anthropic verification program can call it; same rates as Claude Fable 5.2. Standard speed only: fast mode (speed fast, usage.speed fast) bills USD 16/M input and 80/M output on the Claude API and is excluded. No prompt-length tier. Cache reads are 0.025x input. Excludes US geography (inference_geo us bills 1.1x on every token category), batch, Priority Tier, Bedrock, Google Cloud and Foundry. Thinking is output usage. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs, and no generic cache-write rate is published. web_searches counts usage.server_tool_use.web_search_requests at USD 10 per 1,000 searches (failed searches are not billed; the adapters map it from non-streamed responses). Code execution, web fetch tokens and other server tools are not priced here.',
+            'rates' => [
+                'input_tokens' => ['amount' => '8', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '40', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'cache_write_input_tokens_5m' => ['amount' => '10', 'per' => '1000000'],
+                'cache_write_input_tokens_1h' => ['amount' => '16', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
         'anthropic:claude-fable-5-1-global' => [
@@ -1041,6 +1118,18 @@ return [
                 'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
+        'anthropic:claude-sonnet-4-5-20250929' => [
+            'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
+            'notes' => 'Checked 2026-11-28. Claude API pinned snapshot claude-sonnet-4-5-20250929 (Claude Sonnet 4.5); the documented alias claude-sonnet-4-5 resolves to it. Synchronous Messages API. Deprecated legacy model, retiring on the Claude API on 2026-11-30 (replacement claude-sonnet-5-5) per https://platform.claude.com/docs/en/about-claude/model-deprecations; the rates still price requests that ran before retirement. It does not accept inference_geo (requests with it return 400) and has no fast mode, and its 200k context window has no long-context tier, so the Claude API has one price for it. Excludes batch, Priority Tier and partner-cloud regional pricing (Bedrock and Google Cloud bill regional endpoints 1.1x under their own provider identities). Thinking is output usage. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs, and no generic cache-write rate is published. web_searches counts usage.server_tool_use.web_search_requests at USD 10 per 1,000 searches (failed searches are not billed; the adapters map it from non-streamed responses). Code execution, web fetch tokens and other server tools are not priced here.',
+            'rates' => [
+                'input_tokens' => ['amount' => '3', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '15', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.30', 'per' => '1000000'],
+                'cache_write_input_tokens_5m' => ['amount' => '3.75', 'per' => '1000000'],
+                'cache_write_input_tokens_1h' => ['amount' => '6', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
         'anthropic:claude-haiku-4-5-20251001' => [
             'source' => 'https://platform.claude.com/docs/en/about-claude/pricing',
             'notes' => 'Checked 2026-10-10. Claude API pinned snapshot claude-haiku-4-5-20251001 (Claude Haiku 4.5); the documented alias claude-haiku-4-5 resolves to it. Synchronous Messages API. Legacy model, retirement not sooner than 2026-10-15 per https://platform.claude.com/docs/en/about-claude/model-deprecations. It does not accept inference_geo (requests with it return 400) and has no fast mode, and its 200k context window has no long-context tier, so the Claude API has one price for it. Excludes batch, Priority Tier and partner-cloud regional pricing (Bedrock and Google Cloud bill regional endpoints 1.1x under their own provider identities). Thinking is output usage. Cache input partitions are exclusive; write units distinguish 5-minute and 1-hour TTLs, and no generic cache-write rate is published. web_searches counts usage.server_tool_use.web_search_requests at USD 10 per 1,000 searches (failed searches are not billed; the adapters map it from non-streamed responses). Code execution, web fetch tokens and other server tools are not priced here.',
@@ -1050,6 +1139,72 @@ return [
                 'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
                 'cache_write_input_tokens_5m' => ['amount' => '1.25', 'per' => '1000000'],
                 'cache_write_input_tokens_1h' => ['amount' => '2', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-6.2-astra-standard-short' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-6.2-astra, standard service tier, at most 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. Cache reads bill at 0.05x input. cache_write_input_tokens is the default 30-minute cache write at 1.25x input (https://developers.openai.com/api/docs/guides/prompt-caching). Responses API 12-hour cache writes (prompt_cache_options.ttl "12h", billed at 2.5x input) are not covered: no unit here prices them, so do not report them as cache_write_input_tokens. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '8', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '40', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.40', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '10', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-6.2-astra-standard-long' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-6.2-astra, standard service tier, more than 272,000 input tokens; the long-context rates apply to the full request; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. Cache reads bill at 0.05x input. cache_write_input_tokens is the default 30-minute cache write at 1.25x input (https://developers.openai.com/api/docs/guides/prompt-caching). Responses API 12-hour cache writes (prompt_cache_options.ttl "12h", billed at 2.5x input) are not covered: no unit here prices them, so do not report them as cache_write_input_tokens. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '16', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '60', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.80', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '20', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-6.2-sol-standard-short' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-6.2-sol, standard service tier, at most 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. Cache reads bill at 0.05x input. cache_write_input_tokens is the default 30-minute cache write at 1.25x input (https://developers.openai.com/api/docs/guides/prompt-caching). Responses API 12-hour cache writes (prompt_cache_options.ttl "12h", billed at 2.5x input) are not covered: no unit here prices them, so do not report them as cache_write_input_tokens. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-6.2-sol-standard-long' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-6.2-sol, standard service tier, more than 272,000 input tokens; the long-context rates apply to the full request; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. Cache reads bill at 0.05x input. cache_write_input_tokens is the default 30-minute cache write at 1.25x input (https://developers.openai.com/api/docs/guides/prompt-caching). Responses API 12-hour cache writes (prompt_cache_options.ttl "12h", billed at 2.5x input) are not covered: no unit here prices them, so do not report them as cache_write_input_tokens. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '15', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-6.1-terra-standard-short' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-6.1-terra, standard service tier, at most 272,000 input tokens; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. Cache reads bill at 0.05x input. cache_write_input_tokens is the default 30-minute cache write at 1.25x input (https://developers.openai.com/api/docs/guides/prompt-caching). Responses API 12-hour cache writes (prompt_cache_options.ttl "12h", billed at 2.5x input) are not covered: no unit here prices them, so do not report them as cache_write_input_tokens. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.05', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-6.1-terra-standard-long' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-6.1-terra, standard service tier, more than 272,000 input tokens; the long-context rates apply to the full request; not an alias. Excludes regional/FedRAMP 10% uplift, batch, flex, fast, ultrafast and built-in tools other than web search. Reasoning is output usage; input cache partitions are exclusive. Cache reads bill at 0.05x input. cache_write_input_tokens is the default 30-minute cache write at 1.25x input (https://developers.openai.com/api/docs/guides/prompt-caching). Responses API 12-hour cache writes (prompt_cache_options.ttl "12h", billed at 2.5x input) are not covered: no unit here prices them, so do not report them as cache_write_input_tokens. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 calls, the web search price for all models; search content tokens bill at the model token rates inside input usage. OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
                 'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
@@ -1163,24 +1318,36 @@ return [
         ],
         'openai:gpt-5.6-sol-standard-short' => [
             'source' => 'https://developers.openai.com/api/docs/pricing',
-            'notes' => 'Checked 2026-10-10. Direct OpenAI billing basis for gpt-5.6-sol (snapshot gpt-5.6-sol), standard service tier, at most 272,000 input tokens; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. Cache writes bill at 1.25x and cache reads at 0.1x the applicable uncached input rate; input partitions (uncached, cached, cache-write) are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled. Promotional rates that OpenAI guarantees only through at least 2026-11-21 (described as a 20% input and 33% output reduction, implying a prior USD 5/M input and 30/M output); re-review on or before that date. Includes reasoning.mode pro, which bills at the standard token rates.',
-            'rates' => [
-                'input_tokens' => ['amount' => '4', 'per' => '1000000'],
-                'output_tokens' => ['amount' => '20', 'per' => '1000000'],
-                'cached_input_tokens' => ['amount' => '0.40', 'per' => '1000000'],
-                'cache_write_input_tokens' => ['amount' => '5', 'per' => '1000000'],
-                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-5.6-sol (snapshot gpt-5.6-sol), standard service tier, at most 272,000 input tokens; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. Cache writes bill at 1.25x and cache reads at 0.1x the applicable uncached input rate; input partitions (uncached, cached, cache-write) are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled. Promotional rates: the pricing page states "GPT-5.6 Sol’s promotional pricing is available until November 30, 2026." and publishes no successor rate, so this basis has one rate window that expires at 2026-12-01T00:00Z and is unavailable from then on instead of guessing a post-promotion price. OpenAI gives no timezone for the date; UTC is used because it is the earlier, fail-closed instant. Re-review when OpenAI publishes the post-promotion rate. Includes reasoning.mode pro, which bills at the standard token rates.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '20', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.40', 'per' => '1000000'],
+                        'cache_write_input_tokens' => ['amount' => '5', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '10', 'per' => '1000'],
+                    ],
+                ],
             ],
         ],
         'openai:gpt-5.6-sol-standard-long' => [
             'source' => 'https://developers.openai.com/api/docs/pricing',
-            'notes' => 'Checked 2026-10-10. Direct OpenAI billing basis for gpt-5.6-sol (snapshot gpt-5.6-sol), standard service tier, more than 272,000 input tokens; the long-context rates apply to the full request; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. Cache writes bill at 1.25x and cache reads at 0.1x the applicable uncached input rate; input partitions (uncached, cached, cache-write) are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled. Promotional rates that OpenAI guarantees only through at least 2026-11-21 (described as a 20% input and 33% output reduction, implying a prior USD 5/M input and 30/M output); re-review on or before that date. Includes reasoning.mode pro, which bills at the standard token rates.',
-            'rates' => [
-                'input_tokens' => ['amount' => '8', 'per' => '1000000'],
-                'output_tokens' => ['amount' => '30', 'per' => '1000000'],
-                'cached_input_tokens' => ['amount' => '0.80', 'per' => '1000000'],
-                'cache_write_input_tokens' => ['amount' => '10', 'per' => '1000000'],
-                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-5.6-sol (snapshot gpt-5.6-sol), standard service tier, more than 272,000 input tokens; the long-context rates apply to the full request; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. Cache writes bill at 1.25x and cache reads at 0.1x the applicable uncached input rate; input partitions (uncached, cached, cache-write) are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled. Promotional rates: the pricing page states "GPT-5.6 Sol’s promotional pricing is available until November 30, 2026." and publishes no successor rate, so this basis has one rate window that expires at 2026-12-01T00:00Z and is unavailable from then on instead of guessing a post-promotion price. OpenAI gives no timezone for the date; UTC is used because it is the earlier, fail-closed instant. Re-review when OpenAI publishes the post-promotion rate. Includes reasoning.mode pro, which bills at the standard token rates.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '8', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '30', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.80', 'per' => '1000000'],
+                        'cache_write_input_tokens' => ['amount' => '10', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '10', 'per' => '1000'],
+                    ],
+                ],
             ],
         ],
         'openai:gpt-5.6-terra-standard-short' => [
@@ -1335,6 +1502,90 @@ return [
             'rates' => [
                 'input_tokens' => ['amount' => '21', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '168', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-5.4-nano-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-5.4-nano (snapshot gpt-5.4-nano-2026-03-17), standard service tier, all prompt lengths. 400,000-token context with 128,000 max output; OpenAI publishes no long-context tier.; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. OpenAI charges no additional cache-write fee before GPT-5.6, and input tokens bill at exactly one of the uncached, cached or cache-write rates (https://developers.openai.com/api/docs/guides/prompt-caching), so cache_write_input_tokens is priced at the uncached input rate; input partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.02', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-5.1-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-5.1 (snapshot gpt-5.1-2025-11-13), standard service tier, all prompt lengths. 400,000-token context with 128,000 max output; OpenAI publishes no long-context tier.; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. OpenAI charges no additional cache-write fee before GPT-5.6, and input tokens bill at exactly one of the uncached, cached or cache-write rates (https://developers.openai.com/api/docs/guides/prompt-caching), so cache_write_input_tokens is priced at the uncached input rate; input partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.125', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-5-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-5 (snapshot gpt-5-2025-08-07), standard service tier, all prompt lengths. 400,000-token context with 128,000 max output; OpenAI publishes no long-context tier.; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. OpenAI charges no additional cache-write fee before GPT-5.6, and input tokens bill at exactly one of the uncached, cached or cache-write rates (https://developers.openai.com/api/docs/guides/prompt-caching), so cache_write_input_tokens is priced at the uncached input rate; input partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.125', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-5-mini-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-5-mini (snapshot gpt-5-mini-2025-08-07), standard service tier, all prompt lengths. 400,000-token context with 128,000 max output; OpenAI publishes no long-context tier.; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. OpenAI charges no additional cache-write fee before GPT-5.6, and input tokens bill at exactly one of the uncached, cached or cache-write rates (https://developers.openai.com/api/docs/guides/prompt-caching), so cache_write_input_tokens is priced at the uncached input rate; input partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.25', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.025', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '0.25', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-5-nano-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-5-nano (snapshot gpt-5-nano-2025-08-07), standard service tier, all prompt lengths. 400,000-token context with 128,000 max output; OpenAI publishes no long-context tier.; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. OpenAI charges no additional cache-write fee before GPT-5.6, and input tokens bill at exactly one of the uncached, cached or cache-write rates (https://developers.openai.com/api/docs/guides/prompt-caching), so cache_write_input_tokens is priced at the uncached input rate; input partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '0.05', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '0.40', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.005', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '0.05', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:gpt-5-pro-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for gpt-5-pro (snapshot gpt-5-pro-2025-10-06), standard service tier, all prompt lengths. 400,000-token context with 272,000 max output; OpenAI publishes no long-context tier.; not an alias. Excludes batch, regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. OpenAI publishes no cached-input discount or cache-write rate for this model, so cached_input_tokens and cache_write_input_tokens stay unpriced and a reported count leaves the quote partial. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '15', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '120', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:o3-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for o3 (snapshot o3-2025-04-16), standard service tier, all prompt lengths. 200,000-token context with 100,000 max output; OpenAI publishes no long-context tier.; not an alias. Excludes batch, flex, fast (formerly priority), regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. OpenAI charges no additional cache-write fee before GPT-5.6, and input tokens bill at exactly one of the uncached, cached or cache-write rates (https://developers.openai.com/api/docs/guides/prompt-caching), so cache_write_input_tokens is priced at the uncached input rate; input partitions are exclusive. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '8', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.50', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'web_searches' => ['amount' => '10', 'per' => '1000'],
+            ],
+        ],
+        'openai:o3-pro-standard' => [
+            'source' => 'https://developers.openai.com/api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Direct OpenAI billing basis for o3-pro (snapshot o3-pro-2025-06-10), standard service tier, all prompt lengths. 200,000-token context with 100,000 max output; OpenAI publishes no long-context tier.; not an alias. Excludes batch, regional processing and FedRAMP endpoints (10% uplift for models released on or after 2026-03-05), built-in tools other than web search. Reasoning is output usage. OpenAI publishes no cached-input discount or cache-write rate for this model, so cached_input_tokens and cache_write_input_tokens stay unpriced and a reported count leaves the quote partial. web_searches counts web_search_call items whose action is search (open_page and find_in_page are not billed) at USD 10 per 1,000 for both web_search and web_search_preview on reasoning models (https://developers.openai.com/api/docs/guides/tools-web-search); search content tokens bill at the model token rates inside input usage. The adapters do not count OpenAI web searches yet, because OpenAI usage reports no search count, so callers must pass web_searches or the searches go unbilled.',
+            'rates' => [
+                'input_tokens' => ['amount' => '20', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '80', 'per' => '1000000'],
                 'web_searches' => ['amount' => '10', 'per' => '1000'],
             ],
         ],
@@ -1909,6 +2160,52 @@ return [
                 ],
             ],
         ],
+        'gemini:gemini-4-carbon-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Date-windowed billing basis for gemini-4-carbon (https://ai.google.dev/gemini-api/docs/models/gemini-4-carbon) on the Gemini Developer API (generateContent or Interactions), paid tier, standard service tier (service_tier omitted or standard); not a provider alias. Gemini 4 Carbon has no free tier. Google publishes standard rates through November 30, 2026 (USD 2/M input, 10/M output, 0.10/M cache hits) and doubles every token rate starting December 1, 2026 (4/M, 20/M, 0.20/M). Google states no timezone, so the package changes windows at 2026-12-01T00:00Z. An actual cost uses the window in effect when the request ran; a maximum-cost estimate uses the higher rate whenever its interval reaches December 2026. One input rate covers every input modality. No long-context tier: one rate for every prompt length. Output includes thinking tokens; no separate reasoning rate. Google counts and bills every processed token, including internal tool system instructions and function declarations when grounding. cached_input_tokens covers implicit cache hits (input partitions are exclusive); explicit caching is not supported, so there is no cache storage charge and no per-token cache-write fee, and cache_write_input_tokens stays unpriced. web_searches counts individual Google Search grounding queries the model executes (USD 14 per 1,000 in both windows); the monthly free allowance of 5,000 shared across Gemini 3 and newer models is not subtracted, and Google caps grounding at 1,500 requests per day. Google Maps grounding is excluded. Excludes batch and flex (half the standard rates), priority (1.8x) and Vertex AI pricing.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2026-12-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '4', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '20', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.20', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.014', 'per' => '1'],
+                    ],
+                ],
+            ],
+        ],
+        'gemini:gemini-4-neon-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Billing basis for gemini-4-neon (https://ai.google.dev/gemini-api/docs/models/gemini-4-neon) on the Gemini Developer API (generateContent or Interactions), paid tier, standard service tier (service_tier omitted or standard); not a provider alias. Gemini 4 Neon has no free tier. No announced price change. One input rate covers every input modality. No long-context tier: one rate for every prompt length up to the 1M-token context window. Output includes thinking tokens; no separate reasoning rate. Google counts and bills every processed token, including internal tool system instructions and function declarations when grounding. cached_input_tokens covers implicit cache hits (input partitions are exclusive); explicit caching is not supported, so there is no cache storage charge and no per-token cache-write fee, and cache_write_input_tokens stays unpriced. web_searches counts individual Google Search grounding queries the model executes at USD 14 per 1,000; the monthly free allowance of 5,000 shared across Gemini 3 and newer models is not subtracted, and Google caps grounding at 1,500 requests per day. Google Maps grounding is excluded. Excludes batch and flex (half the standard rates), priority and Vertex AI pricing.',
+            'rates' => [
+                'input_tokens' => ['amount' => '3', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '15', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                'web_searches' => ['amount' => '0.014', 'per' => '1'],
+            ],
+        ],
+        'gemini:gemini-4-hydrogen-standard' => [
+            'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
+            'notes' => 'Checked 2026-11-28. Billing basis for gemini-4-hydrogen (https://ai.google.dev/gemini-api/docs/models/gemini-4-hydrogen) on the Gemini Developer API (generateContent or Interactions), paid tier, standard service tier (service_tier omitted or standard); not a provider alias. Gemini 4 Hydrogen also has a free tier (free of charge, data used to improve Google products); only the paid rates are priced here, so do not use this basis for free-tier requests. No announced price change. One input rate covers every input modality. No long-context tier: one rate for every prompt length up to the 1M-token context window. Output includes thinking tokens; no separate reasoning rate. Google counts and bills every processed token, including internal tool system instructions and function declarations when grounding. cached_input_tokens covers implicit cache hits (input partitions are exclusive); explicit caching is not supported, so there is no cache storage charge and no per-token cache-write fee, and cache_write_input_tokens stays unpriced. web_searches counts individual Google Search grounding queries the model executes at USD 14 per 1,000 (paid tier only); the monthly free allowance of 5,000 shared across Gemini 3 and newer models is not subtracted, and Google caps grounding at 1,500 requests per day. Google Maps grounding is excluded. Excludes batch and flex (half the standard rates), priority and Vertex AI pricing.',
+            'rates' => [
+                'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.075', 'per' => '1000000'],
+                'web_searches' => ['amount' => '0.014', 'per' => '1'],
+            ],
+        ],
         'gemini:gemini-3.5-flash-lite-standard' => [
             'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
             'notes' => 'Checked 2026-10-10. Billing basis for gemini-3.5-flash-lite on the Gemini Developer API, paid tier, standard service tier; not a provider alias. One input rate covers text, image, video and audio. No long-context tier. Output includes thinking tokens. Exclusive input/cache-hit partitions; cache writes unpriced (no published per-token fee). Explicit-cache storage (USD 1.00 per million token-hours) is excluded and unpriced. web_searches is per Google Search grounding query at USD 14 per 1,000, free monthly allowance not subtracted. Google Maps grounding is excluded. Excludes batch, flex, priority, Live API and Vertex AI pricing.',
@@ -1981,25 +2278,73 @@ return [
         ],
         'gemini:gemini-2.5-pro-standard-short' => [
             'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
-            'notes' => 'Checked 2026-10-10. Billing basis for gemini-2.5-pro on the Gemini Developer API, paid tier, standard service tier, prompts of at most 200,000 tokens (counting cached tokens); not a provider alias. Google limits 2.5 access to existing users; no shutdown date announced. One input rate for all modalities. Output includes thinking tokens. Exclusive input/cache-hit partitions; cache writes unpriced. Explicit-cache storage (USD 4.50 per million token-hours) is excluded and unpriced. Google Search and Google Maps grounding are excluded: Gemini 2.5 bills them per grounded prompt (USD 35 and 25 per 1,000), not per query, so do not pass web_searches for them. Excludes batch, flex, priority and Vertex AI pricing.',
-            'rates' => [
-                'input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
-                'output_tokens' => ['amount' => '10', 'per' => '1000000'],
-                'cached_input_tokens' => ['amount' => '0.125', 'per' => '1000000'],
+            'notes' => 'Checked 2026-11-28. Date-windowed billing basis for gemini-2.5-pro on the Gemini Developer API, paid tier, standard service tier, prompts of at most 200,000 tokens (counting cached tokens); not a provider alias. gemini-2.5-pro is deprecated and no longer selectable in Google AI Studio. Google states that from December 1, 2026 every API request to gemini-2.5-pro automatically routes to Gemini 3.8 Flash (gemini-3.8-flash) and bills at Gemini 3.8 Flash rates, so the windows are: until 2026-12-01T00:00Z, the 2.5 Pro short-prompt rates (USD 1.25/M input, 10/M output, 0.125/M cache hits); from 2026-12-01T00:00Z to 2027-01-01T00:00Z, the 3.8 Flash introductory rates (0.75/M, 3.75/M, 0.075/M); from 2027-01-01T00:00Z, the doubled 3.8 Flash rates (1.50/M, 7.50/M, 0.15/M). 3.8 Flash has no prompt-length tier, so the -short and -long bases bill the same after routing. Google states no timezone for either date, so the boundaries use UTC, as on gemini-3.8-flash-standard. An actual cost uses the window in effect when the request ran; a maximum-cost estimate uses the highest rate its interval reaches. One input rate for all modalities. Output includes thinking tokens. Exclusive input/cache-hit partitions; cache writes unpriced. Explicit-cache storage (USD 4.50 per million token-hours before routing, then 3.8 Flash storage rates) is excluded and unpriced. Google Search and Google Maps grounding are excluded and no web_searches unit is published: Gemini 2.5 billed them per grounded prompt (USD 35 and 25 per 1,000), not per query, and grounding after routing follows the 3.8 Flash per-query terms on gemini-3.8-flash-standard. Excludes batch, flex, priority and Vertex AI pricing.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '10', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.125', 'per' => '1000000'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2026-12-01T00:00:00+00:00',
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.075', 'per' => '1000000'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                    ],
+                ],
             ],
         ],
         'gemini:gemini-2.5-pro-standard-long' => [
             'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
-            'notes' => 'Checked 2026-10-10. Billing basis for gemini-2.5-pro on the Gemini Developer API, paid tier, standard service tier, prompts of more than 200,000 tokens (counting cached tokens); the higher tier applies to the whole request. Not a provider alias. Output includes thinking tokens. Exclusive input/cache-hit partitions; cache writes unpriced. Explicit-cache storage (USD 4.50 per million token-hours) is excluded and unpriced. Google Search and Google Maps grounding are excluded: Gemini 2.5 bills them per grounded prompt (USD 35 and 25 per 1,000), not per query, so do not pass web_searches for them. Excludes batch, flex, priority and Vertex AI pricing.',
-            'rates' => [
-                'input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
-                'output_tokens' => ['amount' => '15', 'per' => '1000000'],
-                'cached_input_tokens' => ['amount' => '0.25', 'per' => '1000000'],
+            'notes' => 'Checked 2026-11-28. Date-windowed billing basis for gemini-2.5-pro on the Gemini Developer API, paid tier, standard service tier, prompts of more than 200,000 tokens (counting cached tokens); before routing the higher tier applies to the whole request. Not a provider alias. gemini-2.5-pro is deprecated and no longer selectable in Google AI Studio. Google states that from December 1, 2026 every API request to gemini-2.5-pro automatically routes to Gemini 3.8 Flash (gemini-3.8-flash) and bills at Gemini 3.8 Flash rates, so the windows are: until 2026-12-01T00:00Z, the 2.5 Pro long-prompt rates (USD 2.50/M input, 15/M output, 0.25/M cache hits); from 2026-12-01T00:00Z to 2027-01-01T00:00Z, the 3.8 Flash introductory rates (0.75/M, 3.75/M, 0.075/M); from 2027-01-01T00:00Z, the doubled 3.8 Flash rates (1.50/M, 7.50/M, 0.15/M). 3.8 Flash has no prompt-length tier, so the -short and -long bases bill the same after routing. Google states no timezone for either date, so the boundaries use UTC, as on gemini-3.8-flash-standard. An actual cost uses the window in effect when the request ran; a maximum-cost estimate uses the highest rate its interval reaches. Output includes thinking tokens. Exclusive input/cache-hit partitions; cache writes unpriced. Explicit-cache storage (USD 4.50 per million token-hours before routing, then 3.8 Flash storage rates) is excluded and unpriced. Google Search and Google Maps grounding are excluded and no web_searches unit is published: Gemini 2.5 billed them per grounded prompt (USD 35 and 25 per 1,000), not per query, and grounding after routing follows the 3.8 Flash per-query terms on gemini-3.8-flash-standard. Excludes batch, flex, priority and Vertex AI pricing.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '15', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.25', 'per' => '1000000'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2026-12-01T00:00:00+00:00',
+                    'effective_until' => '2027-01-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '0.75', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '3.75', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.075', 'per' => '1000000'],
+                    ],
+                ],
+                [
+                    'effective_from' => '2027-01-01T00:00:00+00:00',
+                    'effective_until' => null,
+                    'rates' => [
+                        'input_tokens' => ['amount' => '1.50', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.15', 'per' => '1000000'],
+                    ],
+                ],
             ],
         ],
         'gemini:gemini-2.5-flash-standard' => [
             'source' => 'https://ai.google.dev/gemini-api/docs/pricing',
-            'notes' => 'Checked 2026-10-10. Billing basis for gemini-2.5-flash on the Gemini Developer API, paid tier, standard service tier, text, image and video input only; not a provider alias. Google limits 2.5 access to existing users; no shutdown date announced. Audio input bills at USD 1.00/M (cache hits 0.10/M) and is excluded. No long-context tier. Output includes thinking tokens. Exclusive input/cache-hit partitions; cache writes unpriced. Explicit-cache storage (USD 1.00 per million token-hours) is excluded and unpriced. Google Search and Google Maps grounding are excluded: Gemini 2.5 bills them per grounded prompt (USD 35 and 25 per 1,000), not per query, so do not pass web_searches for them. Excludes batch, flex, priority and Vertex AI pricing.',
+            'notes' => 'Checked 2026-11-28. Billing basis for gemini-2.5-flash on the Gemini Developer API, paid tier, standard service tier, text, image and video input only; not a provider alias. gemini-2.5-flash is deprecated and no longer selectable in Google AI Studio. Google states that from December 1, 2026 every API request to gemini-2.5-flash automatically routes to Gemini 3.5 Flash-Lite (gemini-3.5-flash-lite) and bills at Gemini 3.5 Flash-Lite rates; the text, image and video token rates are identical (USD 0.30/M input, 2.50/M output, 0.03/M cache hits), so this basis keeps one rate set with no date window. After routing, grounding and audio follow the 3.5 Flash-Lite terms on gemini-3.5-flash-lite-standard. Before routing, audio input bills at USD 1.00/M (cache hits 0.10/M) and is excluded. No long-context tier. Output includes thinking tokens. Exclusive input/cache-hit partitions; cache writes unpriced. Explicit-cache storage (USD 1.00 per million token-hours) is excluded and unpriced. Google Search and Google Maps grounding are excluded: Gemini 2.5 bills them per grounded prompt (USD 35 and 25 per 1,000), not per query, so do not pass web_searches for them. Excludes batch, flex, priority and Vertex AI pricing.',
             'rates' => [
                 'input_tokens' => ['amount' => '0.30', 'per' => '1000000'],
                 'output_tokens' => ['amount' => '2.50', 'per' => '1000000'],
@@ -2381,6 +2726,28 @@ return [
                 'web_searches' => ['amount' => '0.014', 'per' => '1'],
             ],
         ],
+        'openrouter:openai/gpt-6.1-terra-standard-max-short' => [
+            'source' => 'https://openrouter.ai/api/v1/models/openai/gpt-6.1-terra-20261026/endpoints',
+            'notes' => 'Checked 2026-11-28. Synthetic worst-case billing basis for openai/gpt-6.1-terra (canonical openai/gpt-6.1-terra-20261026) under OpenRouter default routing at the standard service tier, prompts below 272,000 tokens; not an alias. Default routing spans openai, azure and google-vertex/global, all at USD 1/M input and 5/M output with no regional endpoint and no catalog discount, so the worst-case rate is every default-routed endpoint\'s rate today and matches OpenAI\'s direct standard rate. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. Cache reads bill at 0.05x and cache writes at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-6.1-terra identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review.',
+            'rates' => [
+                'input_tokens' => ['amount' => '1', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '5', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.05', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '1.25', 'per' => '1000000'],
+                'web_searches' => ['amount' => '0.01', 'per' => '1'],
+            ],
+        ],
+        'openrouter:openai/gpt-6.1-terra-standard-max-long' => [
+            'source' => 'https://openrouter.ai/api/v1/models/openai/gpt-6.1-terra-20261026/endpoints',
+            'notes' => 'Checked 2026-11-28. Synthetic worst-case billing basis for openai/gpt-6.1-terra (canonical openai/gpt-6.1-terra-20261026) under OpenRouter default routing at the standard service tier, prompts of at least 272,000 tokens (the catalog override threshold is inclusive at 272,000, unlike the direct API, and applies to the whole request); not an alias. Default routing spans openai, azure and google-vertex/global, all at USD 2/M input and 7.50/M output under the override, with no regional endpoint and no catalog discount, so the worst-case rate is every default-routed endpoint\'s rate today and matches OpenAI\'s direct standard long-context rate. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. Cache reads bill at 0.05x and cache writes at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-6.1-terra identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review.',
+            'rates' => [
+                'input_tokens' => ['amount' => '2', 'per' => '1000000'],
+                'output_tokens' => ['amount' => '7.50', 'per' => '1000000'],
+                'cached_input_tokens' => ['amount' => '0.10', 'per' => '1000000'],
+                'cache_write_input_tokens' => ['amount' => '2.50', 'per' => '1000000'],
+                'web_searches' => ['amount' => '0.01', 'per' => '1'],
+            ],
+        ],
         'openrouter:openai/gpt-6.1-sol-standard-max-short' => [
             'source' => 'https://openrouter.ai/api/v1/models/openai/gpt-6.1-sol-20260929/endpoints',
             'notes' => 'Checked 2026-10-10. Synthetic worst-case billing basis for openai/gpt-6.1-sol (canonical openai/gpt-6.1-sol-20260929) under OpenRouter default routing at the standard service tier, prompts below 272,000 tokens; not an alias. Default routing spans azure, openai at USD 2/M input and 10/M output; amazon-bedrock/us-east-1, azure/eu, azure/us at USD 2.2/M input and 11/M output; every request is priced at the most expensive default-routed endpoint, so a request served at the base rate is overstated. Opt-in tiers (openai/flex, openai/fast, openai/ultrafast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. Cache writes bill at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-6.1-sol identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review.',
@@ -2559,46 +2926,70 @@ return [
         ],
         'openrouter:openai/gpt-5.6-sol-standard-max-short' => [
             'source' => 'https://openrouter.ai/api/v1/models/openai/gpt-5.6-sol-20260709/endpoints',
-            'notes' => 'Checked 2026-10-10. Synthetic worst-case billing basis for openai/gpt-5.6-sol (canonical openai/gpt-5.6-sol-20260709) under OpenRouter default routing at the standard service tier, prompts below 272,000 tokens; not an alias. Default routing spans openai (catalog discount 0.5) at USD 2/M input and 10/M output; azure at USD 4/M input and 20/M output; azure/us, amazon-bedrock/us-east-1, azure/eu at USD 4.4/M input and 22/M output; every request is priced at the most expensive default-routed endpoint, so a request served at the base rate is overstated. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. The openai endpoint carries a 50% OpenRouter discount (USD 2/M input, 10/M output) below OpenAI\'s direct USD 4/M and 20/M promotional rates, which the azure endpoint charges; the live model-level catalog shows only the discounted rate. Cache writes bill at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-5.6-sol identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review.',
-            'rates' => [
-                'input_tokens' => ['amount' => '4.4', 'per' => '1000000'],
-                'output_tokens' => ['amount' => '22', 'per' => '1000000'],
-                'cached_input_tokens' => ['amount' => '0.44', 'per' => '1000000'],
-                'cache_write_input_tokens' => ['amount' => '5.5', 'per' => '1000000'],
-                'web_searches' => ['amount' => '0.01', 'per' => '1'],
+            'notes' => 'Checked 2026-10-10. Synthetic worst-case billing basis for openai/gpt-5.6-sol (canonical openai/gpt-5.6-sol-20260709) under OpenRouter default routing at the standard service tier, prompts below 272,000 tokens; not an alias. Default routing spans openai (catalog discount 0.5) at USD 2/M input and 10/M output; azure at USD 4/M input and 20/M output; azure/us, amazon-bedrock/us-east-1, azure/eu at USD 4.4/M input and 22/M output; every request is priced at the most expensive default-routed endpoint, so a request served at the base rate is overstated. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. The openai endpoint carries a 50% OpenRouter discount (USD 2/M input, 10/M output) below OpenAI\'s direct USD 4/M and 20/M promotional rates, which the azure endpoint charges; the live model-level catalog shows only the discounted rate. Cache writes bill at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-5.6-sol identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review. Expiry added 2026-11-28: OpenAI states "GPT-5.6 Sol’s promotional pricing is available until November 30, 2026." and the OpenRouter catalog still lists the promotional USD 4/M input and 20/M output base on openai, azure and amazon-bedrock/global (the openai discount and the regional endpoints are no longer listed, so these rates now overstate every default-routed endpoint), with no published successor rate, so this basis expires at 2026-12-01T00:00Z (UTC, the earlier fail-closed instant, because OpenAI gives no timezone) and is unavailable from then on.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '4.4', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '22', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.44', 'per' => '1000000'],
+                        'cache_write_input_tokens' => ['amount' => '5.5', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.01', 'per' => '1'],
+                    ],
+                ],
             ],
         ],
         'openrouter:openai/gpt-5.6-sol-standard-max-long' => [
             'source' => 'https://openrouter.ai/api/v1/models/openai/gpt-5.6-sol-20260709/endpoints',
-            'notes' => 'Checked 2026-10-10. Synthetic worst-case billing basis for openai/gpt-5.6-sol (canonical openai/gpt-5.6-sol-20260709) under OpenRouter default routing at the standard service tier, prompts of at least 272,000 tokens (the catalog override threshold is inclusive at 272,000, unlike the direct API, and applies to the whole request); not an alias. Default routing spans openai (catalog discount 0.5) at USD 4/M input and 15/M output; azure at USD 8/M input and 30/M output; azure/us, amazon-bedrock/us-east-1, azure/eu at USD 8.8/M input and 33/M output; every request is priced at the most expensive default-routed endpoint, so a request served at the base rate is overstated. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. The openai endpoint carries a 50% OpenRouter discount (USD 2/M input, 10/M output) below OpenAI\'s direct USD 4/M and 20/M promotional rates, which the azure endpoint charges; the live model-level catalog shows only the discounted rate. Cache writes bill at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-5.6-sol identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review.',
-            'rates' => [
-                'input_tokens' => ['amount' => '8.8', 'per' => '1000000'],
-                'output_tokens' => ['amount' => '33', 'per' => '1000000'],
-                'cached_input_tokens' => ['amount' => '0.88', 'per' => '1000000'],
-                'cache_write_input_tokens' => ['amount' => '11', 'per' => '1000000'],
-                'web_searches' => ['amount' => '0.01', 'per' => '1'],
+            'notes' => 'Checked 2026-10-10. Synthetic worst-case billing basis for openai/gpt-5.6-sol (canonical openai/gpt-5.6-sol-20260709) under OpenRouter default routing at the standard service tier, prompts of at least 272,000 tokens (the catalog override threshold is inclusive at 272,000, unlike the direct API, and applies to the whole request); not an alias. Default routing spans openai (catalog discount 0.5) at USD 4/M input and 15/M output; azure at USD 8/M input and 30/M output; azure/us, amazon-bedrock/us-east-1, azure/eu at USD 8.8/M input and 33/M output; every request is priced at the most expensive default-routed endpoint, so a request served at the base rate is overstated. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. The openai endpoint carries a 50% OpenRouter discount (USD 2/M input, 10/M output) below OpenAI\'s direct USD 4/M and 20/M promotional rates, which the azure endpoint charges; the live model-level catalog shows only the discounted rate. Cache writes bill at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-5.6-sol identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review. Expiry added 2026-11-28: OpenAI states "GPT-5.6 Sol’s promotional pricing is available until November 30, 2026." and the OpenRouter catalog still lists the promotional USD 4/M input and 20/M output base on openai, azure and amazon-bedrock/global (the openai discount and the regional endpoints are no longer listed, so these rates now overstate every default-routed endpoint), with no published successor rate, so this basis expires at 2026-12-01T00:00Z (UTC, the earlier fail-closed instant, because OpenAI gives no timezone) and is unavailable from then on.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '8.8', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '33', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.88', 'per' => '1000000'],
+                        'cache_write_input_tokens' => ['amount' => '11', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.01', 'per' => '1'],
+                    ],
+                ],
             ],
         ],
         'openrouter:openai/gpt-5.6-sol-pro-standard-max-short' => [
             'source' => 'https://openrouter.ai/api/v1/models/openai/gpt-5.6-sol-pro-20260709/endpoints',
-            'notes' => 'Checked 2026-10-10. Synthetic worst-case billing basis for openai/gpt-5.6-sol-pro (canonical openai/gpt-5.6-sol-pro-20260709) under OpenRouter default routing at the standard service tier, prompts below 272,000 tokens; not an alias. Default routing spans openai (catalog discount 0.5) at USD 2/M input and 10/M output; azure at USD 4/M input and 20/M output; azure/eu at USD 4.4/M input and 22/M output; every request is priced at the most expensive default-routed endpoint, so a request served at the base rate is overstated. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. The openai endpoint carries a 50% OpenRouter discount (USD 2/M input, 10/M output) below OpenAI\'s direct USD 4/M and 20/M promotional rates, which the azure endpoint charges; the live model-level catalog shows only the discounted rate. Cache writes bill at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-5.6-sol-pro identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review.',
-            'rates' => [
-                'input_tokens' => ['amount' => '4.4', 'per' => '1000000'],
-                'output_tokens' => ['amount' => '22', 'per' => '1000000'],
-                'cached_input_tokens' => ['amount' => '0.44', 'per' => '1000000'],
-                'cache_write_input_tokens' => ['amount' => '5.5', 'per' => '1000000'],
-                'web_searches' => ['amount' => '0.01', 'per' => '1'],
+            'notes' => 'Checked 2026-10-10. Synthetic worst-case billing basis for openai/gpt-5.6-sol-pro (canonical openai/gpt-5.6-sol-pro-20260709) under OpenRouter default routing at the standard service tier, prompts below 272,000 tokens; not an alias. Default routing spans openai (catalog discount 0.5) at USD 2/M input and 10/M output; azure at USD 4/M input and 20/M output; azure/eu at USD 4.4/M input and 22/M output; every request is priced at the most expensive default-routed endpoint, so a request served at the base rate is overstated. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. The openai endpoint carries a 50% OpenRouter discount (USD 2/M input, 10/M output) below OpenAI\'s direct USD 4/M and 20/M promotional rates, which the azure endpoint charges; the live model-level catalog shows only the discounted rate. Cache writes bill at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-5.6-sol-pro identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review. Expiry added 2026-11-28: OpenAI states "GPT-5.6 Sol’s promotional pricing is available until November 30, 2026." and the OpenRouter catalog still lists the promotional USD 4/M input and 20/M output base on openai, azure and amazon-bedrock/global (the openai discount and the regional endpoints are no longer listed, so these rates now overstate every default-routed endpoint), with no published successor rate, so this basis expires at 2026-12-01T00:00Z (UTC, the earlier fail-closed instant, because OpenAI gives no timezone) and is unavailable from then on.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '4.4', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '22', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.44', 'per' => '1000000'],
+                        'cache_write_input_tokens' => ['amount' => '5.5', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.01', 'per' => '1'],
+                    ],
+                ],
             ],
         ],
         'openrouter:openai/gpt-5.6-sol-pro-standard-max-long' => [
             'source' => 'https://openrouter.ai/api/v1/models/openai/gpt-5.6-sol-pro-20260709/endpoints',
-            'notes' => 'Checked 2026-10-10. Synthetic worst-case billing basis for openai/gpt-5.6-sol-pro (canonical openai/gpt-5.6-sol-pro-20260709) under OpenRouter default routing at the standard service tier, prompts of at least 272,000 tokens (the catalog override threshold is inclusive at 272,000, unlike the direct API, and applies to the whole request); not an alias. Default routing spans openai (catalog discount 0.5) at USD 4/M input and 15/M output; azure at USD 8/M input and 30/M output; azure/eu at USD 8.8/M input and 33/M output; every request is priced at the most expensive default-routed endpoint, so a request served at the base rate is overstated. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. The openai endpoint carries a 50% OpenRouter discount (USD 2/M input, 10/M output) below OpenAI\'s direct USD 4/M and 20/M promotional rates, which the azure endpoint charges; the live model-level catalog shows only the discounted rate. Cache writes bill at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-5.6-sol-pro identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review.',
-            'rates' => [
-                'input_tokens' => ['amount' => '8.8', 'per' => '1000000'],
-                'output_tokens' => ['amount' => '33', 'per' => '1000000'],
-                'cached_input_tokens' => ['amount' => '0.88', 'per' => '1000000'],
-                'cache_write_input_tokens' => ['amount' => '11', 'per' => '1000000'],
-                'web_searches' => ['amount' => '0.01', 'per' => '1'],
+            'notes' => 'Checked 2026-10-10. Synthetic worst-case billing basis for openai/gpt-5.6-sol-pro (canonical openai/gpt-5.6-sol-pro-20260709) under OpenRouter default routing at the standard service tier, prompts of at least 272,000 tokens (the catalog override threshold is inclusive at 272,000, unlike the direct API, and applies to the whole request); not an alias. Default routing spans openai (catalog discount 0.5) at USD 4/M input and 15/M output; azure at USD 8/M input and 30/M output; azure/eu at USD 8.8/M input and 33/M output; every request is priced at the most expensive default-routed endpoint, so a request served at the base rate is overstated. Opt-in tiers (openai/flex, openai/fast) are excluded; callers must not select them. Reasoning is output usage; no internal_reasoning rate is published. The openai endpoint carries a 50% OpenRouter discount (USD 2/M input, 10/M output) below OpenAI\'s direct USD 4/M and 20/M promotional rates, which the azure endpoint charges; the live model-level catalog shows only the discounted rate. Cache writes bill at 1.25x the applicable input rate, matching OpenAI and https://openrouter.ai/docs/guides/best-practices/prompt-caching; input partitions are exclusive. web_searches counts native OpenAI web searches only, passed through at USD 0.01 per search per https://openrouter.ai/docs/guides/features/server-tools/web-search; Exa and other engines are distinct, unpriced units. The generic openrouter:openai/gpt-5.6-sol-pro identity is fallback-blocked. Snapshot invalidation: a change to the canonical revision, the default-routed endpoint set, token or cache rates, override threshold or search pricing requires fresh review. Expiry added 2026-11-28: OpenAI states "GPT-5.6 Sol’s promotional pricing is available until November 30, 2026." and the OpenRouter catalog still lists the promotional USD 4/M input and 20/M output base on openai, azure and amazon-bedrock/global (the openai discount and the regional endpoints are no longer listed, so these rates now overstate every default-routed endpoint), with no published successor rate, so this basis expires at 2026-12-01T00:00Z (UTC, the earlier fail-closed instant, because OpenAI gives no timezone) and is unavailable from then on.',
+            'rate_windows' => [
+                [
+                    'effective_from' => null,
+                    'effective_until' => '2026-12-01T00:00:00+00:00',
+                    'rates' => [
+                        'input_tokens' => ['amount' => '8.8', 'per' => '1000000'],
+                        'output_tokens' => ['amount' => '33', 'per' => '1000000'],
+                        'cached_input_tokens' => ['amount' => '0.88', 'per' => '1000000'],
+                        'cache_write_input_tokens' => ['amount' => '11', 'per' => '1000000'],
+                        'web_searches' => ['amount' => '0.01', 'per' => '1'],
+                    ],
+                ],
             ],
         ],
         'openrouter:openai/gpt-5.6-terra-standard-max-short' => [
