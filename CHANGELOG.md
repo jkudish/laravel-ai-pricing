@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-28
+
 ### Added
 
 - Pricing snapshot v21 (retrieved 2026-11-28) adds these current text models, checked 2026-11-28 against <https://platform.claude.com/docs/en/about-claude/pricing>, <https://developers.openai.com/api/docs/pricing> and <https://ai.google.dev/gemini-api/docs/pricing>:
@@ -242,7 +244,8 @@ This is a breaking release under 0.x semver: reasoning tokens now bill exactly o
 - `AiPricing::cost()` for completed Laravel AI responses and `AiPricing::quote()` for pre-request estimates.
 - Laravel 13 test-suite support and Laravel 12 clean-consumer installation support on PHP 8.4 and newer.
 
-[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.4...main
+[Unreleased]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.5...main
+[0.4.5]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jkudish/laravel-ai-pricing/compare/v0.4.1...v0.4.2
