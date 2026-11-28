@@ -190,6 +190,26 @@ it('leaves unsafe new generic identities fallback blocked', function (string $pr
     ['gemini', 'gemini-4-argon'],
     ['openrouter', 'google/gemini-4-argon'],
     ['openrouter', 'meta/muse-wonder'],
+    ['anthropic', 'claude-fable-5-2'],
+    ['anthropic', 'claude-mythos-5-2'],
+    ['openai', 'gpt-6.2-astra'],
+    ['openai', 'gpt-6.2-sol'],
+    ['openai', 'gpt-6.1-terra'],
+    ['openai', 'gpt-5.4-nano'],
+    ['openai', 'gpt-5.1'],
+    ['openai', 'gpt-5'],
+    ['openai', 'gpt-5-mini'],
+    ['openai', 'gpt-5-nano'],
+    ['openai', 'gpt-5-pro'],
+    ['openai', 'o3'],
+    ['openai', 'o3-pro'],
+    ['openai', 'gpt-5.1-2025-11-13'],
+    ['openai', 'o3-pro-2025-06-10'],
+    ['gemini', 'gemini-4-carbon'],
+    ['gemini', 'gemini-4-neon'],
+    ['gemini', 'gemini-4-hydrogen'],
+    ['openrouter', 'openai/gpt-6.1-terra'],
+    ['openrouter', 'google/gemini-4-neon'],
 ]);
 
 it('does not double charge inclusive totals when exclusive modalities are priced', function (string $model, Usage $usage, string $expected): void {
@@ -236,7 +256,7 @@ it('provides reviewed package pricing for stable provider SKUs', function (strin
         ->and($definition?->identity->toArray())->toBe(['provider' => $provider, 'model' => $sku])
         ->and((string) $definition?->rates[$unit]->amount)->toBe($amount)
         ->and((string) $definition?->rates[$unit]->per)->toBe($per)
-        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-10-30')
+        ->and($definition?->retrievedAt?->format('Y-m-d'))->toBe('2026-11-28')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and($definition?->sourceReference)->toStartWith('https://');
 })->with([
@@ -493,13 +513,13 @@ it('quotes every DataForSEO task SKU with exact decimal pricing and provenance',
         ->and((string) $definition?->rates['requests']->amount)->toBe($amount)
         ->and((string) $definition?->rates['requests']->per)->toBe('1')
         ->and($definition?->sourceReference)->toBe($source)
-        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-30T06:48:21+00:00')
+        ->and($definition?->retrievedAt?->format(DATE_ATOM))->toBe('2026-11-28T07:18:49+00:00')
         ->and($definition?->effectiveAt)->toBeNull()
         ->and((string) $single->cost?->amount)->toBe($amount)
         ->and($single->completeness)->toBe(CostCompleteness::Complete)
         ->and($single->source)->toBe(PricingSource::ProviderNative)
         ->and($single->provenance?->reference)->toBe($source)
-        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-30T06:48:21+00:00')
+        ->and($single->provenance?->retrievedAt?->format(DATE_ATOM))->toBe('2026-11-28T07:18:49+00:00')
         ->and((string) $multiple->cost?->amount)->toBe($multipleAmount)
         ->and($multiple->completeness)->toBe(CostCompleteness::Complete);
 })->with([
@@ -519,8 +539,8 @@ it('keeps the six DataForSEO identities distinct and records their actual review
         ARRAY_FILTER_USE_KEY,
     );
 
-    expect($snapshot['version'])->toBe(20)
-        ->and($snapshot['retrieved_at'])->toBe('2026-10-30T06:48:21+00:00')
+    expect($snapshot['version'])->toBe(21)
+        ->and($snapshot['retrieved_at'])->toBe('2026-11-28T07:18:49+00:00')
         ->and(array_keys($prices))->toBe([
             'dataforseo:chatgpt-llm-scraper-standard',
             'dataforseo:chatgpt-llm-scraper-live',
@@ -539,7 +559,7 @@ it('retains a per-SKU source review date when assembling a newer snapshot', func
     $snapshot = packagePricingSnapshot();
 
     foreach ($snapshot['prices'] as $price) {
-        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10|11|13|14|19|30))\./');
+        expect($price['notes'] ?? null)->toMatch('/Checked 2026-(?:09-(?:03|06|10|17|18|23|26|28)|10-(?:09|10|11|13|14|19|30)|11-28)\./');
     }
 });
 
@@ -570,7 +590,7 @@ it('quotes reviewed eval billing bases with exact decimals and provenance withou
         ->and($complete->completeness)->toBe(CostCompleteness::Complete)
         ->and($complete->source)->toBe(PricingSource::ProviderNative)
         ->and($complete->provenance?->reference)->toBe($source)
-        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-10-30T06:48:21+00:00')
+        ->and($definition->retrievedAt?->format(DATE_ATOM))->toBe('2026-11-28T07:18:49+00:00')
         ->and($definition->effectiveAt)->toBeNull()
         ->and(packagePricingSnapshot()['prices'][$key]['notes'] ?? '')->toContain(str_starts_with($key, 'cloudflare:') ? 'Checked 2026-10-13.' : 'Checked 2026-10-09.')
         ->and($partial->cost?->amount->isEqualTo($expectedCost))->toBeTrue()
@@ -906,6 +926,7 @@ it('keeps every fallback-blocked identity unpriced unless it is an allowlisted b
     $boundBasesAllowlist = [
         'openrouter:google/gemini-3.8-flash-standard',
         'openrouter:google/gemini-4-argon-standard',
+        'openrouter:google/gemini-4-neon-standard',
         'openrouter:openai/gpt-5.6-terra-272k',
         'openrouter:openai/gpt-6-luna-272k',
         'openrouter:google/gemini-3.1-flash-lite-standard-max',
@@ -928,6 +949,8 @@ it('keeps every fallback-blocked identity unpriced unless it is an allowlisted b
         'openrouter:google/gemini-3.1-pro-preview-standard-long',
         'openrouter:google/gemini-3.1-pro-preview-customtools-standard-short',
         'openrouter:google/gemini-3.1-pro-preview-customtools-standard-long',
+        'openrouter:openai/gpt-6.1-terra-standard-max-short',
+        'openrouter:openai/gpt-6.1-terra-standard-max-long',
         'openrouter:openai/gpt-6.1-sol-standard-max-short',
         'openrouter:openai/gpt-6.1-sol-standard-max-long',
         'openrouter:openai/gpt-6.1-sol-pro-standard-max-short',
@@ -1062,7 +1085,7 @@ function scaledTokenPrices(string $key, string $factor): array
     return array_map(static fn (BigDecimal $price): BigDecimal => $price->multipliedBy($factor), $prices);
 }
 
-it('prices each native Claude basis at its list rate with 1.25x and 2x TTL cache writes', function (string $key, string $input, string $output, string $cacheRead): void {
+it('prices each native Claude basis at its list rate with 1.25x and 2x TTL cache writes', function (string $key, string $input, string $output, string $cacheRead, string $reviewDate = '2026-10-10'): void {
     expectBasisPrices($key, [
         'input_tokens' => $input,
         'output_tokens' => $output,
@@ -1070,8 +1093,11 @@ it('prices each native Claude basis at its list rate with 1.25x and 2x TTL cache
         'cache_write_input_tokens_5m' => BigDecimal::of($input)->multipliedBy('1.25'),
         'cache_write_input_tokens_1h' => BigDecimal::of($input)->multipliedBy(2),
         'web_searches' => '0.01',
-    ]);
+    ], $reviewDate);
 })->with([
+    ['anthropic:claude-fable-5-2-global', '8', '40', '0.2', '2026-11-28'],
+    ['anthropic:claude-mythos-5-2-global', '8', '40', '0.2', '2026-11-28'],
+    ['anthropic:claude-sonnet-4-5-20250929', '3', '15', '0.3', '2026-11-28'],
     ['anthropic:claude-fable-5-1-global', '10', '50', '0.25'],
     ['anthropic:claude-mythos-5-1-global', '10', '50', '0.25'],
     ['anthropic:claude-fable-5-global', '10', '50', '1'],
@@ -1106,19 +1132,21 @@ it('prices each OpenRouter Claude bound basis at 1.1x the global list rate', fun
     ['openrouter:anthropic/claude-haiku-5.5-standard-long-max', 'anthropic:claude-haiku-5-5-global-long'],
 ]);
 
-it('prices each native Gemini basis with 0.1x cache reads and per-query search only from Gemini 3', function (string $key, string $input, string $output, bool $search): void {
+it('prices each native Gemini basis with its cache-read multiplier and per-query search only from Gemini 3', function (string $key, string $input, string $output, bool $search, string $cacheRead = '0.1', string $reviewDate = '2026-10-10'): void {
     $expected = [
         'input_tokens' => $input,
         'output_tokens' => $output,
-        'cached_input_tokens' => BigDecimal::of($input)->multipliedBy('0.1'),
+        'cached_input_tokens' => BigDecimal::of($input)->multipliedBy($cacheRead),
     ];
 
     if ($search) {
         $expected['web_searches'] = '0.014';
     }
 
-    expectBasisPrices($key, $expected);
+    expectBasisPrices($key, $expected, $reviewDate);
 })->with([
+    ['gemini:gemini-4-neon-standard', '3', '15', true, '0.05', '2026-11-28'],
+    ['gemini:gemini-4-hydrogen-standard', '1.50', '7.50', true, '0.05', '2026-11-28'],
     ['gemini:gemini-3.8-flash-standard-2026', '0.75', '3.75', true],
     ['gemini:gemini-3.8-flash-standard-2027', '1.50', '7.50', true],
     ['gemini:gemini-3.6-flash-standard-2026', '0.75', '3.75', true],
@@ -1130,9 +1158,7 @@ it('prices each native Gemini basis with 0.1x cache reads and per-query search o
     ['gemini:gemini-3.1-pro-preview-customtools-standard-short', '2', '12', true],
     ['gemini:gemini-3.1-pro-preview-customtools-standard-long', '4', '18', true],
     ['gemini:gemini-3-flash-preview-standard', '0.50', '3', true],
-    ['gemini:gemini-2.5-pro-standard-short', '1.25', '10', false],
-    ['gemini:gemini-2.5-pro-standard-long', '2.50', '15', false],
-    ['gemini:gemini-2.5-flash-standard', '0.30', '2.50', false],
+    ['gemini:gemini-2.5-flash-standard', '0.30', '2.50', false, '0.1', '2026-11-28'],
     ['gemini:gemini-2.5-flash-lite-standard', '0.10', '0.40', false],
 ]);
 
@@ -1187,9 +1213,10 @@ it('prices 3.8 and 3.6 Flash from dated windows that double every token rate at 
         ->and($lastSecond->provenance?->toArray()['rate_windows'] ?? null)->toBe([['effective_from' => null, 'effective_until' => '2027-01-01T00:00:00+00:00']]);
 })->with(['gemini-3.8-flash', 'gemini-3.6-flash']);
 
-it('prices each OpenRouter Gemini bound basis from the direct rate and its routing uplift', function (string $basis, string $native, string $uplift): void {
-    expectBasisPrices($basis, [...scaledTokenPrices($native, $uplift), 'web_searches' => '0.014']);
+it('prices each OpenRouter Gemini bound basis from the direct rate and its routing uplift', function (string $basis, string $native, string $uplift, string $reviewDate = '2026-10-10'): void {
+    expectBasisPrices($basis, [...scaledTokenPrices($native, $uplift), 'web_searches' => '0.014'], $reviewDate);
 })->with([
+    'Neon, global only' => ['openrouter:google/gemini-4-neon-standard', 'gemini:gemini-4-neon-standard', '1', '2026-11-28'],
     'regional Vertex 1.1x' => ['openrouter:google/gemini-3.6-flash-standard-max-2026', 'gemini:gemini-3.6-flash-standard-2026', '1.1'],
     'regional Vertex 1.1x lite' => ['openrouter:google/gemini-3.5-flash-lite-standard-max', 'gemini:gemini-3.5-flash-lite-standard', '1.1'],
     'global only, short' => ['openrouter:google/gemini-3.1-pro-preview-standard-short', 'gemini:gemini-3.1-pro-preview-standard-short', '1'],
@@ -1198,7 +1225,7 @@ it('prices each OpenRouter Gemini bound basis from the direct rate and its routi
     'customtools, long' => ['openrouter:google/gemini-3.1-pro-preview-customtools-standard-long', 'gemini:gemini-3.1-pro-preview-customtools-standard-long', '1'],
 ]);
 
-it('prices each native OpenAI basis from its input and output rates and published cache multipliers', function (string $key, string $input, string $output, ?string $cacheRead, ?string $cacheWrite, bool $search): void {
+it('prices each native OpenAI basis from its input and output rates and published cache multipliers', function (string $key, string $input, string $output, ?string $cacheRead, ?string $cacheWrite, bool $search, string $reviewDate = '2026-10-10'): void {
     $expected = ['input_tokens' => $input, 'output_tokens' => $output];
 
     if ($cacheRead !== null) {
@@ -1215,14 +1242,18 @@ it('prices each native OpenAI basis from its input and output rates and publishe
         $expected['web_searches'] = '0.01';
     }
 
-    expectBasisPrices($key, $expected);
+    expectBasisPrices($key, $expected, $reviewDate);
 })->with([
+    ['openai:gpt-6.2-astra-standard-short', '8', '40', '0.05', '1.25', true, '2026-11-28'],
+    ['openai:gpt-6.2-astra-standard-long', '16', '60', '0.05', '1.25', true, '2026-11-28'],
+    ['openai:gpt-6.2-sol-standard-short', '2', '10', '0.05', '1.25', true, '2026-11-28'],
+    ['openai:gpt-6.2-sol-standard-long', '4', '15', '0.05', '1.25', true, '2026-11-28'],
+    ['openai:gpt-6.1-terra-standard-short', '1', '5', '0.05', '1.25', true, '2026-11-28'],
+    ['openai:gpt-6.1-terra-standard-long', '2', '7.50', '0.05', '1.25', true, '2026-11-28'],
     ['openai:gpt-6-astra-standard-short', '10', '50', '0.1', '1.25', true],
     ['openai:gpt-6-astra-standard-long', '20', '75', '0.1', '1.25', true],
     ['openai:gpt-6-sol-standard-short', '2', '10', '0.1', '1.25', true],
     ['openai:gpt-6-sol-standard-long', '4', '15', '0.1', '1.25', true],
-    ['openai:gpt-5.6-sol-standard-short', '4', '20', '0.1', '1.25', true],
-    ['openai:gpt-5.6-sol-standard-long', '8', '30', '0.1', '1.25', true],
     ['openai:gpt-5.6-terra-standard-short', '2', '12', '0.1', '1.25', true],
     ['openai:gpt-5.6-terra-standard-long', '4', '18', '0.1', '1.25', true],
     ['openai:gpt-5.6-luna-standard-short', '0.20', '1.20', '0.1', '1.25', true],
@@ -1238,6 +1269,14 @@ it('prices each native OpenAI basis from its input and output rates and publishe
     ['openai:gpt-5.4-mini-standard', '0.75', '4.50', '0.1', '1', true],
     ['openai:gpt-5.2-standard', '1.75', '14', '0.1', '1', true],
     ['openai:gpt-5.2-pro-standard', '21', '168', null, null, true],
+    ['openai:gpt-5.4-nano-standard', '0.20', '1.25', '0.1', '1', true, '2026-11-28'],
+    ['openai:gpt-5.1-standard', '1.25', '10', '0.1', '1', true, '2026-11-28'],
+    ['openai:gpt-5-standard', '1.25', '10', '0.1', '1', true, '2026-11-28'],
+    ['openai:gpt-5-mini-standard', '0.25', '2', '0.1', '1', true, '2026-11-28'],
+    ['openai:gpt-5-nano-standard', '0.05', '0.40', '0.1', '1', true, '2026-11-28'],
+    ['openai:gpt-5-pro-standard', '15', '120', null, null, true, '2026-11-28'],
+    ['openai:o3-standard', '2', '8', '0.25', '1', true, '2026-11-28'],
+    ['openai:o3-pro-standard', '20', '80', null, null, true, '2026-11-28'],
     ['openai:gpt-4.1-standard', '2', '8', '0.25', '1', false],
     ['openai:gpt-4.1-mini-standard', '0.40', '1.60', '0.25', '1', false],
     ['openai:gpt-4o-standard', '2.50', '10', '0.5', '1', false],
@@ -1245,8 +1284,8 @@ it('prices each native OpenAI basis from its input and output rates and publishe
     ['openai:chat-latest-standard', '5', '30', '0.1', '1', false],
 ]);
 
-it('prices each OpenRouter OpenAI bound basis at 1.1x the direct standard rate', function (string $basis, string $native, bool $cacheWrite, bool $search): void {
-    $expected = scaledTokenPrices($native, '1.1');
+it('prices each OpenRouter OpenAI bound basis at its routing uplift over the direct standard rate', function (string $basis, string $native, bool $cacheWrite, bool $search, string $uplift = '1.1', string $reviewDate = '2026-10-10'): void {
+    $expected = scaledTokenPrices($native, $uplift);
 
     // OpenRouter bills pre-GPT-5.6 cache writes at no cost while OpenAI bills
     // them at the input rate, so those bases leave the write unpriced.
@@ -1258,11 +1297,16 @@ it('prices each OpenRouter OpenAI bound basis at 1.1x the direct standard rate',
         $expected['web_searches'] = '0.01';
     }
 
-    expectBasisPrices($basis, $expected);
+    expectBasisPrices($basis, $expected, $reviewDate);
 })->with(function (): array {
-    $rows = [];
+    // GPT-6.1 Terra has no regional endpoint, so its worst case is the direct rate.
+    $rows = [
+        ['openrouter:openai/gpt-6.1-terra-standard-max-short', 'openai:gpt-6.1-terra-standard-short', true, true, '1', '2026-11-28'],
+        ['openrouter:openai/gpt-6.1-terra-standard-max-long', 'openai:gpt-6.1-terra-standard-long', true, true, '1', '2026-11-28'],
+    ];
 
-    foreach (['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'] as $model) {
+    // GPT-5.6 Sol bases are date-windowed; see the promotional-expiry test.
+    foreach (['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna'] as $model) {
         foreach (['', '-pro'] as $variant) {
             foreach (['short', 'long'] as $tier) {
                 $rows[] = ["openrouter:openai/{$model}{$variant}-standard-max-{$tier}", "openai:{$model}-standard-{$tier}", true, true];
@@ -1408,8 +1452,8 @@ it('quotes DeepSeek V4.1 Flash 1017 with reviewed provenance without hiding unpr
         ->and($partial->missingUnits)->toEqualCanonicalizing(['cache_write_input_tokens', 'openrouter_web_searches']);
 });
 
-it('quotes one model per new family against a hand-calculated total', function (string $provider, string $model, array $usage, string $expected): void {
-    $quote = AiPricing::quote($provider, $model, new Usage($usage));
+it('quotes one model per new family against a hand-calculated total', function (string $provider, string $model, array $usage, string $expected, ?string $at = null): void {
+    $quote = AiPricing::quote($provider, $model, new Usage($usage), at: $at === null ? null : new DateTimeImmutable($at));
 
     expect($quote->amount?->isEqualTo($expected))->toBeTrue("Expected {$expected}, got {$quote->amount}.")
         ->and($quote->completeness)->toBe(CostCompleteness::Complete)
@@ -1430,7 +1474,13 @@ it('quotes one model per new family against a hand-calculated total', function (
     'GPT-5.6 Sol long prompt' => ['openai', 'gpt-5.6-sol-standard-long', [
         'input_tokens' => 400_000, 'cached_input_tokens' => 100_000, 'cache_write_input_tokens' => 50_000,
         'output_tokens' => 20_000, 'web_searches' => 3,
-    ], '4.41'],
+    ], '4.41', '2026-11-28T00:00:00Z'],
+    // Alias to claude-sonnet-4-5-20250929: 1M x 3/M + 100,000 x 0.30/M + 100,000 x 15/M = 3 + 0.03 + 1.5.
+    'Claude Sonnet 4.5 alias' => ['anthropic', 'claude-sonnet-4-5', ['input_tokens' => 1_000_000, 'cached_input_tokens' => 100_000, 'output_tokens' => 100_000], '4.53'],
+    // 300,000 x 16/M + 10,000 x 0.80/M + 1,000 x 60/M + 2 x 0.01 = 4.8 + 0.008 + 0.06 + 0.02.
+    'GPT-6.2 Astra long prompt' => ['openai', 'gpt-6.2-astra-standard-long', [
+        'input_tokens' => 300_000, 'cached_input_tokens' => 10_000, 'output_tokens' => 1_000, 'web_searches' => 2,
+    ], '4.888'],
     // 1M x 1.65/M + 200,000 x 0.219/M + 100,000 x 5/M = 1.65 + 0.0438 + 0.5.
     'DeepSeek V4 Pro on OpenRouter' => ['openrouter', 'deepseek/deepseek-v4-pro-0813-standard-max', [
         'input_tokens' => 1_000_000, 'cached_input_tokens' => 200_000, 'output_tokens' => 100_000,
@@ -1491,9 +1541,9 @@ it('prices Parallel Decisions per request, not per question or token', function 
         ->and(packagePricingSnapshot()['prices']['parallel:decisions-fast']['notes'])->toStartWith('Checked 2026-10-30.');
 });
 
-it('prices Gemini 4 Argon from dated windows that double every token rate at 2026-12-01T00:00Z', function (): void {
-    $key = 'gemini:gemini-4-argon-standard';
-    $definition = packagePricingSource()->find(new ModelIdentity('gemini', 'gemini-4-argon-standard'));
+it('prices Gemini 4 Argon and Carbon from dated windows that double every token rate at 2026-12-01T00:00Z', function (string $model, string $reviewDate): void {
+    $key = "gemini:{$model}";
+    $definition = packagePricingSource()->find(new ModelIdentity('gemini', $model));
     expect($definition)->not->toBeNull();
     assert($definition !== null);
     $entry = packagePricingSnapshot()['prices'][$key];
@@ -1505,7 +1555,7 @@ it('prices Gemini 4 Argon from dated windows that double every token rate at 202
     expect($definition->rates)->toBe([])
         ->and($definition->rateWindows)->toHaveCount(2)
         ->and($entry['source'])->toBe('https://ai.google.dev/gemini-api/docs/pricing')
-        ->and($entry['notes'] ?? '')->toStartWith('Checked 2026-10-14.');
+        ->and($entry['notes'] ?? '')->toStartWith("Checked {$reviewDate}.");
 
     foreach ($expected as $index => [$from, $until, $amounts]) {
         $window = $definition->rateWindows[$index];
@@ -1522,10 +1572,10 @@ it('prices Gemini 4 Argon from dated windows that double every token rate at 202
 
     // 2M x 2/M + 300,000 x 10/M + 50,000 x 0.10/M + 2 x 0.014 = 7.033, doubled tokens = 14.038.
     $usage = new Usage(['input_tokens' => 2_000_000, 'output_tokens' => 300_000, 'cached_input_tokens' => 50_000, 'web_searches' => 2]);
-    $lastSecond = AiPricing::quote('gemini', 'gemini-4-argon-standard', $usage, at: new DateTimeImmutable('2026-11-30T23:59:59Z'));
-    $firstInstant = AiPricing::quote('gemini', 'gemini-4-argon-standard', $usage, at: new DateTimeImmutable('2026-12-01T00:00:00Z'));
-    $runAcrossBoundary = AiPricing::quote('gemini', 'gemini-4-argon-standard', $usage, at: new DateTimeImmutable('2026-11-30T23:00:00Z'), until: new DateTimeImmutable('2026-12-01T01:00:00Z'));
-    $cacheWrite = AiPricing::quote('gemini', 'gemini-4-argon-standard', new Usage([...$usage->toArray(), 'cache_write_input_tokens' => 1000]), at: new DateTimeImmutable('2026-10-14T00:00:00Z'));
+    $lastSecond = AiPricing::quote('gemini', $model, $usage, at: new DateTimeImmutable('2026-11-30T23:59:59Z'));
+    $firstInstant = AiPricing::quote('gemini', $model, $usage, at: new DateTimeImmutable('2026-12-01T00:00:00Z'));
+    $runAcrossBoundary = AiPricing::quote('gemini', $model, $usage, at: new DateTimeImmutable('2026-11-30T23:00:00Z'), until: new DateTimeImmutable('2026-12-01T01:00:00Z'));
+    $cacheWrite = AiPricing::quote('gemini', $model, new Usage([...$usage->toArray(), 'cache_write_input_tokens' => 1000]), at: new DateTimeImmutable('2026-10-14T00:00:00Z'));
 
     expect((string) $lastSecond->amount)->toBe('7.033')
         ->and($lastSecond->completeness)->toBe(CostCompleteness::Complete)
@@ -1535,7 +1585,10 @@ it('prices Gemini 4 Argon from dated windows that double every token rate at 202
         ->and($runAcrossBoundary->provenance?->toArray()['rate_windows'] ?? null)->toHaveCount(2)
         ->and($cacheWrite->completeness)->toBe(CostCompleteness::Partial)
         ->and($cacheWrite->missingUnits)->toBe(['cache_write_input_tokens']);
-});
+})->with([
+    'Argon' => ['gemini-4-argon-standard', '2026-10-14'],
+    'Carbon' => ['gemini-4-carbon-standard', '2026-11-28'],
+]);
 
 it('expires the reviewed OpenRouter Gemini 4 Argon basis when Google doubles its rates', function (): void {
     $usage = new Usage(['input_tokens' => 2000, 'cached_input_tokens' => 3000, 'output_tokens' => 4000, 'web_searches' => 1]);
@@ -1555,6 +1608,78 @@ it('expires the reviewed OpenRouter Gemini 4 Argon basis when Google doubles its
         ->and($cacheWrite->completeness)->toBe(CostCompleteness::Partial)
         ->and($cacheWrite->missingUnits)->toBe(['cache_write_input_tokens']);
 });
+
+it('expires the reviewed GPT-5.6 Sol promotional bases when OpenAI ends the promotion', function (string $provider, string $model, string $expected): void {
+    $usage = new Usage(['input_tokens' => 2000, 'cached_input_tokens' => 3000, 'cache_write_input_tokens' => 1000, 'output_tokens' => 4000, 'web_searches' => 1]);
+    $resolver = app(ResponseCostResolver::class);
+    $definition = packagePricingSource()->find(new ModelIdentity($provider, $model));
+    $before = $resolver->quote($provider, $model, $usage, at: new DateTimeImmutable('2026-11-30T23:59:59Z'));
+    $after = $resolver->quote($provider, $model, $usage, at: new DateTimeImmutable('2026-12-01T00:00:00Z'));
+    $crossing = $resolver->quote($provider, $model, $usage, at: new DateTimeImmutable('2026-11-30T23:59:59Z'), until: new DateTimeImmutable('2026-12-01T00:00:01Z'));
+
+    expect($definition?->rates)->toBe([])
+        ->and($definition?->rateWindows)->toHaveCount(1)
+        ->and($definition?->rateWindows[0]->bounds())->toBe(['effective_from' => null, 'effective_until' => '2026-12-01T00:00:00+00:00'])
+        ->and((string) $before->amount)->toBe($expected)
+        ->and($before->completeness)->toBe(CostCompleteness::Complete)
+        ->and($after->completeness)->toBe(CostCompleteness::Unavailable)
+        ->and($crossing->completeness)->toBe(CostCompleteness::Unavailable);
+})->with([
+    // 2,000 x 4/M + 3,000 x 0.40/M + 1,000 x 5/M + 4,000 x 20/M + 1 x 0.01 = 0.008 + 0.0012 + 0.005 + 0.08 + 0.01.
+    'direct short' => ['openai', 'gpt-5.6-sol-standard-short', '0.1042'],
+    // 2,000 x 8/M + 3,000 x 0.80/M + 1,000 x 10/M + 4,000 x 30/M + 1 x 0.01.
+    'direct long' => ['openai', 'gpt-5.6-sol-standard-long', '0.1584'],
+    // 2,000 x 4.4/M + 3,000 x 0.44/M + 1,000 x 5.5/M + 4,000 x 22/M + 1 x 0.01.
+    'OpenRouter short' => ['openrouter', 'openai/gpt-5.6-sol-standard-max-short', '0.11362'],
+    'OpenRouter long' => ['openrouter', 'openai/gpt-5.6-sol-standard-max-long', '0.17324'],
+    'OpenRouter Pro short' => ['openrouter', 'openai/gpt-5.6-sol-pro-standard-max-short', '0.11362'],
+    'OpenRouter Pro long' => ['openrouter', 'openai/gpt-5.6-sol-pro-standard-max-long', '0.17324'],
+]);
+
+it('prices Gemini 2.5 Pro at its own rates until Google routes it to 3.8 Flash, then at 3.8 Flash rates for both tiers', function (string $tier, array $before): void {
+    $model = "gemini-2.5-pro-standard-{$tier}";
+    $definition = packagePricingSource()->find(new ModelIdentity('gemini', $model));
+    expect($definition)->not->toBeNull();
+    assert($definition !== null);
+    $entry = packagePricingSnapshot()['prices']["gemini:{$model}"];
+    $expected = [
+        [null, '2026-12-01T00:00:00+00:00', $before],
+        ['2026-12-01T00:00:00+00:00', '2027-01-01T00:00:00+00:00', ['input_tokens' => '0.75', 'output_tokens' => '3.75', 'cached_input_tokens' => '0.075']],
+        ['2027-01-01T00:00:00+00:00', null, ['input_tokens' => '1.50', 'output_tokens' => '7.50', 'cached_input_tokens' => '0.15']],
+    ];
+
+    expect($definition->rates)->toBe([])
+        ->and($definition->rateWindows)->toHaveCount(3)
+        ->and($entry['notes'] ?? '')->toStartWith('Checked 2026-11-28.')
+        ->and($entry['notes'] ?? '')->toContain('routes to Gemini 3.8 Flash');
+
+    foreach ($expected as $index => [$from, $until, $amounts]) {
+        $window = $definition->rateWindows[$index];
+
+        expect($window->bounds())->toBe(['effective_from' => $from, 'effective_until' => $until])
+            ->and(array_keys($window->rates))->toBe(array_keys($amounts));
+
+        foreach ($amounts as $unit => $amount) {
+            expect($entry['rate_windows'][$index]['rates'][$unit]['amount'])->toBe($amount)
+                ->and($entry['rate_windows'][$index]['rates'][$unit]['per'])->toBeString()
+                ->and($window->rates[$unit]->currency)->toBe('USD');
+        }
+    }
+
+    // 1M input + 100,000 output + 100,000 cached at each window's rates.
+    $usage = new Usage(['input_tokens' => 1_000_000, 'output_tokens' => 100_000, 'cached_input_tokens' => 100_000]);
+    $at = static fn (string $instant): string => (string) AiPricing::quote('gemini', $model, $usage, at: new DateTimeImmutable($instant))->amount;
+    $search = AiPricing::quote('gemini', $model, new Usage([...$usage->toArray(), 'web_searches' => 1]), at: new DateTimeImmutable('2026-12-15T00:00:00Z'));
+
+    expect($at('2026-11-30T23:59:59Z'))->toBe($tier === 'short' ? '2.2625' : '4.025')
+        ->and($at('2026-12-01T00:00:00Z'))->toBe('1.1325')
+        ->and($at('2027-01-01T00:00:00Z'))->toBe('2.265')
+        ->and($search->completeness)->toBe(CostCompleteness::Partial)
+        ->and($search->missingUnits)->toBe(['web_searches']);
+})->with([
+    'short' => ['short', ['input_tokens' => '1.25', 'output_tokens' => '10', 'cached_input_tokens' => '0.125']],
+    'long' => ['long', ['input_tokens' => '2.50', 'output_tokens' => '15', 'cached_input_tokens' => '0.25']],
+]);
 
 it('prices Muse Wonder on Meta Model API and its only OpenRouter endpoint at the same list rates', function (string $provider, string $model, string $source): void {
     $expected = ['input_tokens' => '4', 'cached_input_tokens' => '0.20', 'output_tokens' => '20', 'web_searches' => '0.0025'];
